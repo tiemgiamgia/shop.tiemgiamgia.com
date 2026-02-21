@@ -1,27 +1,23 @@
 import { loadFeed } from "@/lib/feed";
 import Header from "@/layout/Header";
 import Footer from "@/layout/Footer";
+import { notFound } from "next/navigation";
 
-export async function generateMetadata({ params }) {
-  const sku = params.slug.split("-").pop();
-  const products = await loadFeed();
-  const product = products.find(p => p.sku === sku);
-
-  if (!product) return {};
-
+export async function generateMetadata() {
   return {
-    title: product.name,
-    description: product.desc?.slice(0, 160)
+    title: "Sản phẩm | Tiệm Giảm Giá"
   };
 }
 
 export default async function Page({ params }) {
-  const sku = params.slug.split("-").pop();
+
+  const slugParts = params.slug.split("-");
+  const sku = slugParts[slugParts.length - 1];
 
   const products = await loadFeed();
   const product = products.find(p => p.sku === sku);
 
-  if (!product) return <div>Not found</div>;
+  if (!product) notFound();
 
   return (
     <>

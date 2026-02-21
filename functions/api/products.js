@@ -14,7 +14,9 @@ export async function onRequest(context) {
     csvText = await csvRes.text();
 
     response = new Response(csvText, {
-      headers: { "Cache-Control": "public, max-age=86400" }
+      headers: {
+        "Cache-Control": "public, max-age=86400"
+      }
     });
 
     context.waitUntil(cache.put(cacheKey, response.clone()));
@@ -22,20 +24,55 @@ export async function onRequest(context) {
     csvText = await response.text();
   }
 
-  const rows = csvText.split("\n").map(r => r.trim()).slice(1);
+  const rows = csvText.split("\n").slice(1); // bỏ header
 
   const start = (page - 1) * limit;
   const slice = rows.slice(start, start + limit);
 
-  const products = slice.map(row => {
-    const cols = row.split(",");
-    return {
-      sku: cols[0],
-      name: cols[1],
-      price: cols[3],
-      image: cols[5]
-    };
-  });
+  const products = slice
+    .map(row => parseCSVLine(row))
+    .filter(cols => cols.length > 5 && cols[0]) // lọc dòng rác
+    .map(cols => ({
+      sku: clean(cols[0]),
+      name: clean(cols[1]),
+      price: clean(cols[3]),
+      image: clean(cols[5])
+    }));
 
   return Response.json(products);
+}
+
+/* ================= CSV PARSER ================= */
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let insideQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+
+    if (char === '"') {
+      insideQuotes = !insideQuotes;
+    } 
+    else if (char === ',' && !insideQuotes) {
+      result.push(current);
+      current = '';
+    } 
+    else {
+      current += char;
+    }
+  }
+
+  result.push(current);
+  return result;
+}
+
+/* ================= CLEAN DATA ================= */
+
+function clean(value = '') {
+  return value
+    .replace(/^"|"$/g, '')     // bỏ quote ngoài
+    .replace(/\r/g, '')        // bỏ ký tự rác
+    .trim();
 }

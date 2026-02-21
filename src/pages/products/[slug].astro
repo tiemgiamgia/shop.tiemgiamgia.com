@@ -6,13 +6,8 @@ import Footer from "../../components/Footer.astro";
 
 const { slug } = Astro.params;
 
-/* ✅ Workers-safe fetch */
-const res = await fetch(new URL("/index.json", Astro.request.url));
-
-if (!res.ok) {
-  return Astro.redirect("/404");
-}
-
+/* ✅ Worker-safe JSON fetch */
+const res = await fetch(`${Astro.request.url.origin}/index.json`);
 const products = await res.json();
 
 const product = products.find(p => p.slug === slug);
@@ -21,8 +16,7 @@ if (!product) {
   return Astro.redirect("/404");
 }
 
-const price = Number(product.price || 0)
-  .toLocaleString("vi-VN") + "₫";
+const price = Number(product.price || 0).toLocaleString("vi-VN") + "₫";
 ---
 
 <html lang="vi">

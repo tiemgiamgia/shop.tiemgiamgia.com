@@ -6,7 +6,7 @@ import Footer from "../components/Footer.astro";
 
 const url = new URL(Astro.request.url);
 
-const res = await fetch(`${url.origin}/index.json`);
+const res = await fetch(`${Astro.request.url.origin}/index.json`);
 const products = await res.json();
 ---
 

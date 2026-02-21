@@ -2,7 +2,7 @@ import { defineConfig } from "astro/config";
 import cloudflare from "@astrojs/cloudflare";
 
 export default defineConfig({
-  site: "https://shop.tiemgiamgia.com",
   output: "server",
-  adapter: cloudflare()
+  adapter: cloudflare(),
+  site: "https://shop.tiemgiamgia.com"
 });

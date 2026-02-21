@@ -7,20 +7,13 @@ export async function onRequest(context) {
 
   /* STATIC */
   if (
-    url.pathname.endsWith(".css") ||
-    url.pathname.endsWith(".js") ||
-    url.pathname.endsWith(".png") ||
-    url.pathname.endsWith(".jpg") ||
-    url.pathname.endsWith(".jpeg") ||
-    url.pathname.endsWith(".webp") ||
-    url.pathname.endsWith(".svg") ||
-    url.pathname.endsWith(".ico") ||
+    url.pathname.match(/\.(css|js|png|jpg|jpeg|webp|svg|ico)$/) ||
     url.pathname.startsWith("/assets/")
   ) {
     return next();
   }
 
-  /* JSON CACHE */
+  /* JSON */
   if (url.pathname.endsWith(".json")) {
 
     const cached = await cache.match(request);
@@ -28,38 +21,37 @@ export async function onRequest(context) {
 
     const response = await next();
 
-    const newResponse = response.clone();   // 🔥 FIX
+    const clone = response.clone();
+    clone.headers.set("Cache-Control", "public, max-age=3600");
 
-    newResponse.headers.set(
-      "Cache-Control",
-      "public, max-age=3600"
-    );
-
-    await cache.put(request, newResponse);
+    await cache.put(request, clone);
 
     return response;
   }
 
-  /* HTML CACHE */
-  const cacheKey = new Request(request.url);
-
-  const cachedResponse = await cache.match(cacheKey);
-  if (cachedResponse) return cachedResponse;
-
+  /* HTML */
   const response = await next();
 
   const contentType = response.headers.get("Content-Type") || "";
 
   if (contentType.includes("text/html")) {
 
-    const newResponse = response.clone();   // 🔥 FIX
+    const clone = response.clone();
 
-    newResponse.headers.set(
+    /* 🔥 ÉP MIME CHO SAFARI */
+    clone.headers.set(
+      "Content-Type",
+      "text/html; charset=UTF-8"
+    );
+
+    clone.headers.set(
       "Cache-Control",
       "public, max-age=86400"
     );
 
-    await cache.put(cacheKey, newResponse);
+    await cache.put(request, clone);
+
+    return response;
   }
 
   return response;

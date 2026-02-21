@@ -1,0 +1,39 @@
+---
+export const prerender = false;
+
+const { slug } = Astro.params;
+
+/* ✅ Query KV */
+const productRaw = await Astro.locals.runtime.env.PRODUCTS.get(
+  `product:${slug}`
+);
+
+if (!productRaw) {
+  return Astro.redirect("/404");
+}
+
+const product = JSON.parse(productRaw);
+
+const price =
+  Number(product.price || 0).toLocaleString("vi-VN") + "₫";
+---
+
+<html lang="vi">
+<head>
+  <title>{product.title}</title>
+  <meta name="description" content={product.title} />
+  <link rel="stylesheet" href="/site.css">
+</head>
+
+<body>
+
+  <h1>{product.title}</h1>
+
+  <img src={product.image} alt={product.title} />
+
+  <div class="price">{price}</div>
+
+  <pre>{product.description}</pre>
+
+</body>
+</html>

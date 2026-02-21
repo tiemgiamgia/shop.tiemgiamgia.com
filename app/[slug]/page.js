@@ -1,23 +1,15 @@
-import { loadFeed } from "@/lib/feed";
-import Header from "@/layout/Header";
-import Footer from "@/layout/Footer";
-import { notFound } from "next/navigation";
+export default async function Page(props) {
 
-export async function generateMetadata() {
-  return {
-    title: "Sản phẩm | Tiệm Giảm Giá"
-  };
-}
+  const { params } = props;
 
-export default async function Page({ params }) {
-
-  const slugParts = params.slug.split("-");
-  const sku = slugParts[slugParts.length - 1];
+  const sku = params.slug.split("-").pop();
 
   const products = await loadFeed();
   const product = products.find(p => p.sku === sku);
 
-  if (!product) notFound();
+  if (!product) {
+    return <div>Not found</div>;
+  }
 
   return (
     <>

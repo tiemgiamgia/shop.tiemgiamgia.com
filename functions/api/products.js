@@ -11,12 +11,13 @@ export async function onRequest(context) {
 
   if (!response) {
     const csvRes = await fetch("https://feeds.tiemgiamgia.com/shopee.csv");
-    csvText = await csvRes.text();
+
+    /* 🔥 FIX ENCODING QUAN TRỌNG */
+    const buffer = await csvRes.arrayBuffer();
+    csvText = decodeCSV(buffer);
 
     response = new Response(csvText, {
-      headers: {
-        "Cache-Control": "public, max-age=86400"
-      }
+      headers: { "Cache-Control": "public, max-age=86400" }
     });
 
     context.waitUntil(cache.put(cacheKey, response.clone()));
@@ -24,14 +25,14 @@ export async function onRequest(context) {
     csvText = await response.text();
   }
 
-  const rows = csvText.split("\n").slice(1); // bỏ header
+  const rows = csvText.split("\n").slice(1);
 
   const start = (page - 1) * limit;
   const slice = rows.slice(start, start + limit);
 
   const products = slice
     .map(row => parseCSVLine(row))
-    .filter(cols => cols.length > 5 && cols[0]) // lọc dòng rác
+    .filter(cols => cols.length > 5 && cols[0])
     .map(cols => ({
       sku: clean(cols[0]),
       name: clean(cols[1]),
@@ -42,6 +43,17 @@ export async function onRequest(context) {
   return Response.json(products);
 }
 
+/* ================= ENCODING FIX ================= */
+
+function decodeCSV(buffer) {
+  try {
+    return new TextDecoder("utf-8").decode(buffer);
+  } catch {
+    /* fallback nếu Shopee feed lỗi encoding */
+    return new TextDecoder("windows-1258").decode(buffer);
+  }
+}
+
 /* ================= CSV PARSER ================= */
 
 function parseCSVLine(line) {
@@ -49,19 +61,12 @@ function parseCSVLine(line) {
   let current = '';
   let insideQuotes = false;
 
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-
-    if (char === '"') {
-      insideQuotes = !insideQuotes;
-    } 
+  for (let char of line) {
+    if (char === '"') insideQuotes = !insideQuotes;
     else if (char === ',' && !insideQuotes) {
       result.push(current);
       current = '';
-    } 
-    else {
-      current += char;
-    }
+    } else current += char;
   }
 
   result.push(current);
@@ -72,7 +77,7 @@ function parseCSVLine(line) {
 
 function clean(value = '') {
   return value
-    .replace(/^"|"$/g, '')     // bỏ quote ngoài
-    .replace(/\r/g, '')        // bỏ ký tự rác
+    .replace(/^"|"$/g, '')
+    .replace(/\r/g, '')
     .trim();
 }

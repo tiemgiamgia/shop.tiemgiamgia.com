@@ -1,44 +1,32 @@
 ---
 export const prerender = false;
 
-import Header from "../components/Header.astro";
-import Footer from "../components/Footer.astro";
+const env = Astro.locals.runtime.env;
 
-const url = new URL(Astro.request.url);
+/* 🔥 Load homepage slug list */
+const homepageSlugs = JSON.parse(
+  await env.PRODUCTS.get("homepage")
+);
 
-const res = await fetch(`${Astro.request.url.origin}/index.json`);
-const products = await res.json();
+/* 🔥 Load products song song */
+const products = await Promise.all(
+  homepageSlugs.map(async slug => {
+    const data = await env.PRODUCTS.get(`product:${slug}`);
+    return JSON.parse(data);
+  })
+);
 ---
 
-<html lang="vi">
-<head>
-  <meta charset="UTF-8">
-  <title>TiemGiamGia Shop</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="/site.css">
-</head>
+<h1>Sản phẩm mới</h1>
 
-<body>
-
-  <Header />
-
-  <div class="page">
-    <h1>Sản phẩm mới</h1>
-
-    <div class="grid">
-      {products.slice(0, 20).map(p => (
-        <a href={p.url} class="card">
-          <img src={p.image} alt={p.title} />
-          <div class="title">{p.title}</div>
-          <div class="price">
-            {Number(p.price || 0).toLocaleString("vi-VN")}₫
-          </div>
-        </a>
-      ))}
-    </div>
-  </div>
-
-  <Footer />
-
-</body>
-</html>
+<div class="grid">
+  {products.map(p => (
+    <a href={`/${p.slug}/`} class="card">
+      <img src={p.image} alt={p.title} />
+      <div class="title">{p.title}</div>
+      <div class="price">
+        {Number(p.price).toLocaleString("vi-VN")}₫
+      </div>
+    </a>
+  ))}
+</div>

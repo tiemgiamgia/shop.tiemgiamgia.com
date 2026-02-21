@@ -1,0 +1,44 @@
+---
+import Header from "../components/Header.astro";
+import ProductGrid from "../components/ProductGrid.astro";
+import Footer from "../components/Footer.astro";
+
+const res = await fetch(new URL("/index.json", Astro.site));
+const products = await res.json();
+
+/* 🎯 SMART SORT giống sàn */
+const sorted = products.sort((a, b) => {
+
+  if (b.discount !== a.discount) {
+    return b.discount - a.discount;
+  }
+
+  return b.price - a.price;
+});
+
+/* Chỉ render lô đầu */
+const visibleProducts = sorted.slice(0, 60);
+---
+
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>TiemGiamGia</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Deal ngon mỗi ngày">
+
+  <link rel="stylesheet" href="/site.css">
+</head>
+
+<body>
+
+  <Header />
+
+  <div class="page">
+    <ProductGrid products={visibleProducts} />
+  </div>
+
+  <Footer />
+
+</body>
+</html>

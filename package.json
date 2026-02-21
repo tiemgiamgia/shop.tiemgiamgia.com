@@ -10,6 +10,6 @@
 
   "dependencies": {
     "astro": "^4.0.0",
-    "@astrojs/cloudflare": "^10.0.0"   // 🔥 BẮT BUỘC
+    "@astrojs/cloudflare": "^10.0.0"
   }
 }

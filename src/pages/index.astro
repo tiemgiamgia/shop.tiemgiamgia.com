@@ -1,23 +1,13 @@
 ---
+export const prerender = false;
+
 import Header from "../components/Header.astro";
-import ProductGrid from "../components/ProductGrid.astro";
 import Footer from "../components/Footer.astro";
 
-const res = await fetch(new URL("/index.json", Astro.site));
+const url = new URL(Astro.request.url);
+
+const res = await fetch(`${url.origin}/index.json`);
 const products = await res.json();
-
-/* 🎯 SMART SORT giống sàn */
-const sorted = products.sort((a, b) => {
-
-  if (b.discount !== a.discount) {
-    return b.discount - a.discount;
-  }
-
-  return b.price - a.price;
-});
-
-/* Chỉ render lô đầu */
-const visibleProducts = sorted.slice(0, 60);
 ---
 
 <html lang="vi">
@@ -25,8 +15,6 @@ const visibleProducts = sorted.slice(0, 60);
   <meta charset="UTF-8">
   <title>TiemGiamGia Shop</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Deal ngon mỗi ngày">
-
   <link rel="stylesheet" href="/site.css">
 </head>
 
@@ -35,7 +23,19 @@ const visibleProducts = sorted.slice(0, 60);
   <Header />
 
   <div class="page">
-    <ProductGrid products={visibleProducts} />
+    <h1>Sản phẩm mới</h1>
+
+    <div class="grid">
+      {products.slice(0, 20).map(p => (
+        <a href={p.url} class="card">
+          <img src={p.image} alt={p.title} />
+          <div class="title">{p.title}</div>
+          <div class="price">
+            {Number(p.price || 0).toLocaleString("vi-VN")}₫
+          </div>
+        </a>
+      ))}
+    </div>
   </div>
 
   <Footer />

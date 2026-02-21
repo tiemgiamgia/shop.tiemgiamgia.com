@@ -4,7 +4,10 @@
 
   "scripts": {
     "dev": "next dev",
-    "build": "npx @opennextjs/cloudflare build",
+
+    "build": "next build",
+    "cf": "npx @opennextjs/cloudflare build",
+
     "start": "next start"
   },
 
@@ -12,6 +15,6 @@
     "next": "^15.0.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "@opennextjs/cloudflare": "^1.0.0"
+    "@opennextjs/cloudflare": "^1.16.5"
   }
 }

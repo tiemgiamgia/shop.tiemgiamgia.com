@@ -3,24 +3,44 @@ import fs from "fs";
 const FEED_URL = "https://feeds.tiemgiamgia.com/shopee.csv";
 
 /* ===============================
-   CSV PARSER SAFE
+   ✅ CSV PARSER CHUẨN (KHÔNG VỠ DESC)
 =============================== */
 function parseCSV(text) {
-  const lines = text.split("\n").filter(Boolean);
-  const headers = splitCSVLine(lines[0]);
+  const rows = [];
+  let current = "";
+  let insideQuotes = false;
 
-  return lines.slice(1).map(line => {
+  for (let char of text) {
+    if (char === '"') insideQuotes = !insideQuotes;
+
+    if (char === "\n" && !insideQuotes) {
+      rows.push(current);
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current) rows.push(current);
+
+  const headers = splitCSVLine(rows[0]);
+
+  return rows.slice(1).map(line => {
     const values = splitCSVLine(line);
     const row = {};
 
     headers.forEach((h, i) => {
-      row[h] = values[i] || "";
+      row[h.trim()] = (values[i] || "").trim();
     });
 
     return row;
   });
 }
 
+/* ===============================
+   ✅ SPLIT CSV LINE SAFE
+=============================== */
 function splitCSVLine(line) {
   const result = [];
   let current = "";
@@ -33,7 +53,7 @@ function splitCSVLine(line) {
     }
 
     if (char === "," && !insideQuotes) {
-      result.push(current.trim());
+      result.push(current);
       current = "";
       continue;
     }
@@ -41,11 +61,14 @@ function splitCSVLine(line) {
     current += char;
   }
 
-  result.push(current.trim());
+  result.push(current);
   return result;
 }
 
-function slugify(text) {
+/* ===============================
+   ✅ SLUGIFY SEO SAFE
+=============================== */
+function slugify(text = "") {
   return text
     .toLowerCase()
     .normalize("NFD")
@@ -55,55 +78,97 @@ function slugify(text) {
     .replace(/(^-|-$)/g, "");
 }
 
+/* ===============================
+   ✅ CLEAN DESCRIPTION
+=============================== */
 function cleanDescription(desc = "") {
   return desc
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p>/gi, "\n")
     .replace(/<[^>]+>/g, "")
+    .replace(/\n{2,}/g, "\n")
     .trim();
 }
 
 /* ===============================
-   MAIN
+   🚀 MAIN
 =============================== */
 async function generate() {
-  console.log("🔥 Fetching feed...");
+  try {
+    console.log("🔥 Fetching Shopee feed...");
 
-  const res = await fetch(FEED_URL);
-  const csvText = await res.text();
+    const res = await fetch(FEED_URL);
 
-  const rows = parseCSV(csvText);
+    if (!res.ok) {
+      throw new Error(`Feed error: ${res.status}`);
+    }
 
-  console.log(`🔥 Found ${rows.length} rows`);
+    const csvText = await res.text();
 
-  const products = rows.map((row) => {
+    console.log("🔥 Parsing CSV...");
 
-    const title = row.name;
-    const sku = row.sku;
+    const rows = parseCSV(csvText);
 
-    if (!title || !sku) return null;
+    console.log(`🔥 Raw rows: ${rows.length}`);
 
-    const slug = `${slugify(title)}-${sku}`;
+    const kvData = [];
+    const homepageSlugs = [];
 
-    return {
-      title,
-      sku,
-      slug,
-      price: Number(row.price || 0),
-      image: row.image,
-      description: cleanDescription(row.desc),
-    };
-  }).filter(Boolean);
+    rows.forEach((row, index) => {
 
-  console.log(`✅ ${products.length} valid products`);
+      const title = row.name;
+      const sku = row.sku;
 
-  /* SAVE FOR BULK IMPORT */
-  fs.writeFileSync(
-    "./kv-data.json",
-    JSON.stringify(products, null, 2)
-  );
+      /* ✅ BỎ DÒNG RÁC */
+      if (!title || !sku || sku === "nan") return;
 
-  console.log("✅ kv-data.json ready");
+      const slug = `${slugify(title)}-${sku}`;
+
+      const product = {
+        title,
+        sku,
+        slug,
+        price: Number(row.price || 0),
+        discount: Number(row.discount || 0),
+        image: row.image || "",
+        description: cleanDescription(row.desc || ""),
+        category: row.category || ""
+      };
+
+      /* ✅ PRODUCT ENTRY */
+      kvData.push({
+        key: `product:${slug}`,
+        value: JSON.stringify(product)
+      });
+
+      /* ✅ HOMEPAGE (50 sản phẩm đầu) */
+      if (homepageSlugs.length < 50) {
+        homepageSlugs.push(slug);
+      }
+
+    });
+
+    /* ✅ HOMEPAGE KEY */
+    kvData.push({
+      key: "homepage",
+      value: JSON.stringify(homepageSlugs)
+    });
+
+    fs.writeFileSync(
+      "./kv-data.json",
+      JSON.stringify(kvData, null, 2)
+    );
+
+    console.log(`✅ Valid products: ${kvData.length - 1}`);
+    console.log(`✅ Homepage products: ${homepageSlugs.length}`);
+    console.log(`✅ KV entries: ${kvData.length}`);
+    console.log("✅ kv-data.json ready");
+
+  } catch (err) {
+    console.error("💀 GENERATE FAILED");
+    console.error(err);
+    process.exit(1);
+  }
 }
 
 generate();

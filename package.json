@@ -5,8 +5,10 @@
   "scripts": {
     "dev": "next dev",
 
-    "build": "next build",
-    "cf": "npx @opennextjs/cloudflare build",
+    "feed": "node scripts/convert-feed.js",
+
+    "build": "npm run feed && next build",
+    "cf": "npm run feed && npx @opennextjs/cloudflare build",
 
     "start": "next start"
   },

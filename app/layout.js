@@ -1,4 +1,4 @@
-import "./site.css";
+import "../styles/site.css";
 
 export const metadata = {
   title: "Tiệm Giảm Giá",

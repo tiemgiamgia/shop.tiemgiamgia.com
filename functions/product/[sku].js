@@ -55,10 +55,7 @@ function renderLayout(content, meta) {
   <!DOCTYPE html>
   <html lang="vi">
   <head>
-    <title>${meta.title}</title>
-    <meta name="description" content="${meta.desc}">
-    <meta name="robots" content="index, follow">
-    <link rel="stylesheet" href="/css/site.css">
+   ${headHTML}
   </head>
   <body>
 

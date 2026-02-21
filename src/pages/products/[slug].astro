@@ -6,8 +6,13 @@ import Footer from "../../components/Footer.astro";
 
 const { slug } = Astro.params;
 
-/* ✅ Fetch JSON database */
-const res = await fetch(`${url.origin}/index.json`);
+/* ✅ Workers-safe fetch */
+const res = await fetch(new URL("/index.json", Astro.request.url));
+
+if (!res.ok) {
+  return Astro.redirect("/404");
+}
+
 const products = await res.json();
 
 const product = products.find(p => p.slug === slug);
@@ -16,97 +21,34 @@ if (!product) {
   return Astro.redirect("/404");
 }
 
-/* ✅ Format price */
-const priceValue = Number(product.price || 0);
-const price = priceValue.toLocaleString("vi-VN") + "₫";
-
-/* ✅ SEO SAFE */
-const title = `${product.title} | Tiệm Giảm Giá`;
-const description = `${product.title} – Giá tốt tại Tiệm Giảm Giá`;
-const canonical = `https://shop.tiemgiamgia.com/products/${slug}/`;
+const price = Number(product.price || 0)
+  .toLocaleString("vi-VN") + "₫";
 ---
 
 <html lang="vi">
 <head>
-  <meta charset="UTF-8" />
-  <title>{title}</title>
-
-  <meta name="description" content={description} />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <link rel="stylesheet" href="/site.css" />
-  <link rel="canonical" href={canonical} />
-
-  <!-- ✅ Open Graph -->
-  <meta property="og:title" content={title} />
-  <meta property="og:description" content={description} />
-  <meta property="og:image" content={product.image} />
-  <meta property="og:type" content="product" />
-  <meta property="og:url" content={canonical} />
-
-  <!-- ✅ Twitter -->
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content={title} />
-  <meta name="twitter:description" content={description} />
-  <meta name="twitter:image" content={product.image} />
-
-  <!-- ✅ Schema chuẩn Google -->
-  <script type="application/ld+json">
-    {JSON.stringify({
-      "@context": "https://schema.org",
-      "@type": "Product",
-      name: product.title,
-      image: product.image,
-      brand: {
-        "@type": "Brand",
-        name: product.brand || "Tiệm Giảm Giá"
-      },
-      offers: {
-        "@type": "Offer",
-        price: priceValue,
-        priceCurrency: "VND",
-        availability: "https://schema.org/InStock",
-        url: canonical
-      }
-    })}
-  </script>
+  <meta charset="UTF-8">
+  <title>{product.title}</title>
+  <meta name="description" content={product.title}>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/site.css">
 </head>
 
 <body>
 
   <Header />
 
-  <main class="page">
+  <div class="page">
     <div class="product">
 
-      <div class="product-image">
-        <img
-          src={product.image}
-          alt={product.title}
-          loading="eager"
-          decoding="async"
-        />
-      </div>
+      <img src={product.image} alt={product.title}>
 
-      <div class="product-info">
-        <h1>{product.title}</h1>
+      <h1>{product.title}</h1>
 
-        <div class="price">{price}</div>
-
-        {product.discount > 0 && (
-          <div class="discount">
-            🔥 Giảm giá {product.discount}%
-          </div>
-        )}
-
-        <a href={product.affiliate || "#"} class="buy-btn">
-          Mua ngay
-        </a>
-
-      </div>
+      <div class="price">{price}</div>
 
     </div>
-  </main>
+  </div>
 
   <Footer />
 

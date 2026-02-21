@@ -4,43 +4,49 @@ export async function onRequest(context) {
   const limit = 20;
 
   const cache = caches.default;
-  const cacheKey = new Request("https://cache/products");
+  const cacheKey = new Request("https://cache/products-json");
 
   let response = await cache.match(cacheKey);
-  let csvText;
+  let productsJSON;
 
   if (!response) {
+    console.log("Building JSON cache...");
+
     const csvRes = await fetch("https://feeds.tiemgiamgia.com/shopee.csv");
-
-    /* 🔥 FIX ENCODING QUAN TRỌNG */
     const buffer = await csvRes.arrayBuffer();
-    csvText = decodeCSV(buffer);
+    const csvText = decodeCSV(buffer);
 
-    response = new Response(csvText, {
-      headers: { "Cache-Control": "public, max-age=86400" }
+    const rows = csvText.split("\n").slice(1);
+
+    const products = rows
+      .map(row => parseCSVLine(row))
+      .filter(cols => cols.length > 5 && cols[0])
+      .map(cols => ({
+        sku: clean(cols[0]),
+        name: clean(cols[1]),
+        price: Number(clean(cols[3]) || 0),
+        image: clean(cols[5])
+      }));
+
+    productsJSON = JSON.stringify(products);
+
+    response = new Response(productsJSON, {
+      headers: {
+        "Cache-Control": "public, max-age=86400"
+      }
     });
 
     context.waitUntil(cache.put(cacheKey, response.clone()));
   } else {
-    csvText = await response.text();
+    productsJSON = await response.text();
   }
 
-  const rows = csvText.split("\n").slice(1);
+  const allProducts = JSON.parse(productsJSON);
 
   const start = (page - 1) * limit;
-  const slice = rows.slice(start, start + limit);
+  const slice = allProducts.slice(start, start + limit);
 
-  const products = slice
-    .map(row => parseCSVLine(row))
-    .filter(cols => cols.length > 5 && cols[0])
-    .map(cols => ({
-      sku: clean(cols[0]),
-      name: clean(cols[1]),
-      price: clean(cols[3]),
-      image: clean(cols[5])
-    }));
-
-  return Response.json(products);
+  return Response.json(slice);
 }
 
 /* ================= ENCODING FIX ================= */
@@ -49,7 +55,6 @@ function decodeCSV(buffer) {
   try {
     return new TextDecoder("utf-8").decode(buffer);
   } catch {
-    /* fallback nếu Shopee feed lỗi encoding */
     return new TextDecoder("windows-1258").decode(buffer);
   }
 }

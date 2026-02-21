@@ -4,55 +4,9 @@ const FEED_URL = "https://feeds.tiemgiamgia.com/shopee.csv";
 const OUTPUT_FILE = "./public/index.json";
 
 /* ===============================
-   🧠 CSV PARSER SAFE
-=============================== */
-function parseCSV(text) {
-  const lines = text.split("\n").filter(Boolean);
-  const headers = splitCSVLine(lines[0]);
-
-  return lines.slice(1).map(line => {
-    const values = splitCSVLine(line);
-    const row = {};
-
-    headers.forEach((h, i) => {
-      row[h] = values[i] || "";
-    });
-
-    return row;
-  });
-}
-
-/* ===============================
-   🔥 SPLIT CSV LINE SAFE
-=============================== */
-function splitCSVLine(line) {
-  const result = [];
-  let current = "";
-  let insideQuotes = false;
-
-  for (let char of line) {
-    if (char === '"') {
-      insideQuotes = !insideQuotes;
-      continue;
-    }
-
-    if (char === "," && !insideQuotes) {
-      result.push(current.trim());
-      current = "";
-      continue;
-    }
-
-    current += char;
-  }
-
-  result.push(current.trim());
-  return result;
-}
-
-/* ===============================
    🔥 SLUGIFY SEO SAFE
 =============================== */
-function slugify(text) {
+function slugify(text = "") {
   return text
     .toLowerCase()
     .normalize("NFD")
@@ -67,81 +21,69 @@ function slugify(text) {
 =============================== */
 function cleanDescription(desc = "") {
   return desc
-    .replace(/<br\s*\/?>/gi, "\n")   // <br> → xuống dòng
-    .replace(/<\/p>/gi, "\n")
-    .replace(/<[^>]+>/g, "")         // xoá HTML
-    .replace(/\n{2,}/g, "\n")        // tránh quá nhiều dòng trống
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
 /* ===============================
-   🚀 MAIN
+   🚀 MAIN PARSER (BLOCK MODE)
 =============================== */
 async function generate() {
   try {
     console.log("🔥 Fetching Shopee feed...");
 
     const res = await fetch(FEED_URL);
-    if (!res.ok) {
-      throw new Error(`Feed fetch failed: ${res.status}`);
-    }
+    if (!res.ok) throw new Error("Feed fetch failed");
 
-    const csvText = await res.text();
+    const text = await res.text();
 
-    console.log("🔥 Parsing CSV...");
-    const rows = parseCSV(csvText);
+    console.log("🔥 Parsing feed (block mode)...");
 
-    console.log(`🔥 Found ${rows.length} rows`);
+    const lines = text
+      .split("\n")
+      .map(l => l.trim())
+      .filter(Boolean);
 
-    const products = rows.map((row, index) => {
+    /* ✅ Header detection */
+    const headers = lines.slice(0, 8);
 
-      const title =
-        row.name ||
-        row.title ||
-        row.product_name ||
-        `Product ${index + 1}`;
+    console.log("🔥 Headers:", headers);
 
-      const sku =
-        row.sku ||
-        row.item_sku ||
-        row.product_sku ||
-        index + 1;
+    const products = [];
 
-      const priceRaw =
-        row.price ||
-        row.sale_price ||
-        row.current_price ||
-        "0";
+    for (let i = 8; i < lines.length; i += 8) {
 
-      const image =
-        row.image ||
-        row.image_url ||
-        row.thumbnail ||
-        "";
+      const sku       = lines[i];
+      const name      = lines[i + 1];
+      const url       = lines[i + 2];
+      const priceRaw  = lines[i + 3];
+      const discount  = lines[i + 4];
+      const image     = lines[i + 5];
+      const desc      = lines[i + 6];
+      const category  = lines[i + 7];
 
-      const description =
-        cleanDescription(
-          row.description ||
-          row.desc ||
-          row.product_description ||
-          ""
-        );
+      if (!name || !sku) continue;
 
-      const baseSlug = slugify(title);
+      const baseSlug = slugify(name);
       const slug = `${baseSlug}-${sku}`;
 
-      return {
-        title,
+      products.push({
+        title: name,
         slug,
         sku,
-        price: Number(priceRaw.replace(/[^\d]/g, "")) || 0,
-        image,
-        description,
 
-        /* ✅ URL MỚI */
+        price: Number(priceRaw || 0),
+        discount: Number(discount || 0),
+
+        image,
+        description: cleanDescription(desc),
+        category,
+
+        /* ✅ URL SEO */
         url: `/${slug}/`
-      };
-    });
+      });
+    }
 
     if (!fs.existsSync("./public")) {
       fs.mkdirSync("./public");
@@ -149,7 +91,7 @@ async function generate() {
 
     fs.writeFileSync(
       OUTPUT_FILE,
-      JSON.stringify(products, null, 2)
+      JSON.stringify(products)
     );
 
     console.log("✅ index.json generated");

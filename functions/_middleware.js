@@ -5,7 +5,9 @@ export async function onRequest(context) {
 
   const url = new URL(request.url);
 
-  /* STATIC */
+  /* ===============================
+     BYPASS STATIC
+  =============================== */
   if (
     url.pathname.match(/\.(css|js|png|jpg|jpeg|webp|svg|ico)$/) ||
     url.pathname.startsWith("/assets/")
@@ -13,7 +15,9 @@ export async function onRequest(context) {
     return next();
   }
 
-  /* JSON */
+  /* ===============================
+     CACHE JSON
+  =============================== */
   if (url.pathname.endsWith(".json")) {
 
     const cached = await cache.match(request);
@@ -21,37 +25,47 @@ export async function onRequest(context) {
 
     const response = await next();
 
-    const clone = response.clone();
-    clone.headers.set("Cache-Control", "public, max-age=3600");
+    const headers = new Headers(response.headers);
 
-    await cache.put(request, clone);
+    headers.set("Cache-Control", "public, max-age=3600");
 
-    return response;
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers
+    });
   }
 
-  /* HTML */
+  /* ===============================
+     CACHE HTML
+  =============================== */
+
+  const cacheKey = new Request(request.url);
+
+  const cachedResponse = await cache.match(cacheKey);
+  if (cachedResponse) {
+    return cachedResponse;
+  }
+
   const response = await next();
 
   const contentType = response.headers.get("Content-Type") || "";
 
   if (contentType.includes("text/html")) {
 
-    const clone = response.clone();
+    const headers = new Headers(response.headers);
 
-    /* 🔥 ÉP MIME CHO SAFARI */
-    clone.headers.set(
-      "Content-Type",
-      "text/html; charset=UTF-8"
-    );
+    headers.set("Cache-Control", "public, max-age=86400");
 
-    clone.headers.set(
-      "Cache-Control",
-      "public, max-age=86400"
-    );
+    const newResponse = new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers
+    });
 
-    await cache.put(request, clone);
+    await cache.put(cacheKey, newResponse.clone());
 
-    return response;
+    return newResponse;
   }
 
   return response;

@@ -7,9 +7,11 @@
 
     "generate": "node scripts/generate-products.js",
 
-    "build": "npm run generate && astro build",
+    "upload": "node scripts/upload-kv.js",
 
-    "preview": "astro preview"
+    "build": "astro build",
+
+    "deploy": "npm run generate && npm run upload && wrangler deploy"
   },
 
   "dependencies": {

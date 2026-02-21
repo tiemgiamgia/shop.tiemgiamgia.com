@@ -1,6 +1,6 @@
 ---
 export const prerender = false;
-
+const { slug } = Astro.params;
 const env = Astro.locals.runtime.env;
 
 /* 🔥 Load homepage slug list */

@@ -7,7 +7,7 @@ import Footer from "../../components/Footer.astro";
 const { slug } = Astro.params;
 
 /* ✅ Fetch JSON database */
-const res = await fetch(new URL("/index.json", Astro.site));
+const res = await fetch(`${url.origin}/index.json`);
 const products = await res.json();
 
 const product = products.find(p => p.slug === slug);

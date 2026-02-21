@@ -1,0 +1,72 @@
+---
+import Header from "../../components/Header.astro";
+import Footer from "../../components/Footer.astro";
+
+const { slug } = Astro.params;
+
+const res = await fetch(new URL("/index.json", Astro.site));
+const products = await res.json();
+
+const product = products.find(p => p.slug === slug);
+
+if (!product) {
+  return Astro.redirect("/404");
+}
+
+const price = Number(product.price || 0)
+  .toLocaleString("vi-VN") + "₫";
+---
+
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>{product.title}</title>
+  <meta name="description" content={product.title}>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="stylesheet" href="/site.css">
+
+  <!-- SEO -->
+  <link rel="canonical" href={`https://shop.tiemgiamgia.com/products/${slug}/`}>
+
+  <meta property="og:title" content={product.title}>
+  <meta property="og:image" content={product.image}>
+  <meta property="og:type" content="product">
+
+  <!-- Schema -->
+  <script type="application/ld+json">
+    {JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "Product",
+      name: product.title,
+      image: product.image,
+      offers: {
+        "@type": "Offer",
+        price: product.price,
+        priceCurrency: "VND"
+      }
+    })}
+  </script>
+
+</head>
+
+<body>
+
+  <Header />
+
+  <div class="page">
+    <div class="product">
+
+      <img src={product.image} alt={product.title}>
+
+      <h1>{product.title}</h1>
+
+      <div class="price">{price}</div>
+
+    </div>
+  </div>
+
+  <Footer />
+
+</body>
+</html>

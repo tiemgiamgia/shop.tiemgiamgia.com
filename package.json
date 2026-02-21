@@ -4,7 +4,9 @@
 
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+
+    "build": "node scripts/generate-products.js && astro build",
+
     "preview": "astro preview"
   },
 

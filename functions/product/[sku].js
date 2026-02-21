@@ -58,19 +58,16 @@ function renderLayout(content, meta) {
     <title>${meta.title}</title>
     <meta name="description" content="${meta.desc}">
     <meta name="robots" content="index, follow">
-    <link rel="stylesheet" href="/site.css">
+    <link rel="stylesheet" href="css/site.css">
   </head>
   <body>
 
-    <div class="header">
-      Tiệm Giảm Giá
-    </div>
+    ${layout.headerHTML}
 
     ${content}
 
-    <div class="footer">
-      © 2026 tiemgiamgia.com
-    </div>
+    ${layout.footerHTML}
+
 
   </body>
   </html>

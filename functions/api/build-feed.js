@@ -1,29 +1,32 @@
 export async function onRequest(context) {
+  const url = new URL(context.request.url);
+
+  const page = Number(url.searchParams.get("page") || 1);
+  const chunkSize = 500;
+
   const cache = caches.default;
-  const cacheKey = new Request("https://cache/products-json");
+  const cacheKey = new Request(`https://cache/feed-page-${page}`);
 
-  let cached = await cache.match(cacheKey);
-  if (cached) {
-    return cached;
-  }
+  const cached = await cache.match(cacheKey);
+  if (cached) return cached;
 
-  console.log("Building JSON feed...");
+  console.log("Building chunk:", page);
 
   const csvRes = await fetch("https://feeds.tiemgiamgia.com/shopee.csv");
+
   const buffer = await csvRes.arrayBuffer();
   const csvText = decodeCSV(buffer);
 
-  const rows = parseCSV(csvText);
+  const rows = csvText.split("\n").slice(1);
 
-  const products = {};
+  const start = (page - 1) * chunkSize;
+  const slice = rows.slice(start, start + chunkSize);
 
-  rows.forEach(cols => {
-    if (!cols[0]) return;
-
-    const sku = clean(cols[0]);
-
-    products[sku] = {
-      sku,
+  const products = slice
+    .map(row => parseCSVLine(row))
+    .filter(cols => cols.length > 5 && cols[0])
+    .map(cols => ({
+      sku: clean(cols[0]),
       name: clean(cols[1]),
       url: clean(cols[2]),
       price: Number(clean(cols[3]) || 0),
@@ -31,14 +34,10 @@ export async function onRequest(context) {
       image: clean(cols[5]),
       desc: clean(cols[6]),
       category: clean(cols[7])
-    };
-  });
+    }));
 
-  const json = JSON.stringify(products);
-
-  const response = new Response(json, {
+  const response = Response.json(products, {
     headers: {
-      "Content-Type": "application/json",
       "Cache-Control": "public, max-age=86400"
     }
   });
@@ -60,38 +59,25 @@ function decodeCSV(buffer) {
 
 /* ================= CSV PARSER ================= */
 
-function parseCSV(text) {
-  const rows = [];
-  let row = [];
-  let current = "";
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
   let insideQuotes = false;
 
-  for (let char of text) {
+  for (let char of line) {
     if (char === '"') insideQuotes = !insideQuotes;
-    else if (char === "," && !insideQuotes) {
-      row.push(current);
-      current = "";
-    }
-    else if (char === "\n" && !insideQuotes) {
-      row.push(current);
-      rows.push(row);
-
-      row = [];
-      current = "";
-    }
-    else current += char;
+    else if (char === ',' && !insideQuotes) {
+      result.push(current);
+      current = '';
+    } else current += char;
   }
 
-  if (current) {
-    row.push(current);
-    rows.push(row);
-  }
-
-  return rows.slice(1);
+  result.push(current);
+  return result;
 }
 
 /* ================= CLEAN ================= */
 
-function clean(value = "") {
-  return value.replace(/^"|"$/g, "").replace(/\r/g, "").trim();
+function clean(value = '') {
+  return value.replace(/^"|"$/g, '').replace(/\r/g, '').trim();
 }

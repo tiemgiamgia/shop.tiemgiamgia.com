@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 
-const { slug } = Astro.params;
+
 
 /* ✅ Query KV */
 const productRaw = await Astro.locals.runtime.env.PRODUCTS.get(

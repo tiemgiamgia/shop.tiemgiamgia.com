@@ -31,10 +31,7 @@ function renderLayout(content, meta, layout) {
   <!DOCTYPE html>
   <html lang="vi">
   <head>
-    <title>${meta.title}</title>
-    <meta name="description" content="${meta.desc}">
-    <link rel="stylesheet" href="/site.css">
-    <script src="/js/sticky-bar.js" defer></script>
+   ${headHTML}
   </head>
   <body>
 

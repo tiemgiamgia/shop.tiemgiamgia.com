@@ -58,7 +58,7 @@ function renderLayout(content, meta) {
     <title>${meta.title}</title>
     <meta name="description" content="${meta.desc}">
     <meta name="robots" content="index, follow">
-    <link rel="stylesheet" href="css/site.css">
+    <link rel="stylesheet" href="/css/site.css">
   </head>
   <body>
 

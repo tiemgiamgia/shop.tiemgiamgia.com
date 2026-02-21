@@ -5,9 +5,7 @@ export async function onRequest(context) {
 
   const url = new URL(request.url);
 
-  /* ===============================
-     🔥 BYPASS STATIC ASSETS
-  =============================== */
+  /* STATIC */
   if (
     url.pathname.endsWith(".css") ||
     url.pathname.endsWith(".js") ||
@@ -22,10 +20,7 @@ export async function onRequest(context) {
     return next();
   }
 
-  /* ===============================
-     🧠 CACHE JSON (DATABASE CACHE)
-     → Cache feed / index.json / API JSON
-  =============================== */
+  /* JSON CACHE */
   if (url.pathname.endsWith(".json")) {
 
     const cached = await cache.match(request);
@@ -33,28 +28,23 @@ export async function onRequest(context) {
 
     const response = await next();
 
-    const newResponse = new Response(response.body, response);
+    const newResponse = response.clone();   // 🔥 FIX
 
     newResponse.headers.set(
       "Cache-Control",
       "public, max-age=3600"
     );
 
-    await cache.put(request, newResponse.clone());
+    await cache.put(request, newResponse);
 
-    return newResponse;
+    return response;
   }
 
-  /* ===============================
-     🚀 CACHE HTML (SSR CACHE)
-  =============================== */
-
+  /* HTML CACHE */
   const cacheKey = new Request(request.url);
 
   const cachedResponse = await cache.match(cacheKey);
-  if (cachedResponse) {
-    return cachedResponse;
-  }
+  if (cachedResponse) return cachedResponse;
 
   const response = await next();
 
@@ -62,16 +52,14 @@ export async function onRequest(context) {
 
   if (contentType.includes("text/html")) {
 
-    const newResponse = new Response(response.body, response);
+    const newResponse = response.clone();   // 🔥 FIX
 
     newResponse.headers.set(
       "Cache-Control",
       "public, max-age=86400"
     );
 
-    await cache.put(cacheKey, newResponse.clone());
-
-    return newResponse;
+    await cache.put(cacheKey, newResponse);
   }
 
   return response;

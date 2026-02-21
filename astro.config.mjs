@@ -1,5 +1,12 @@
-import { defineConfig } from 'astro/config';
+import { defineConfig } from "astro/config";
+import cloudflare from "@astrojs/cloudflare";
 
 export default defineConfig({
-  output: "server"   // 🔥 QUAN TRỌNG NHẤT
+
+  output: "server",          // 🔥 SSR MODE
+
+  adapter: cloudflare(),     // 🔥 QUAN TRỌNG NHẤT
+
+  site: "https://shop.tiemgiamgia.com"
+
 });

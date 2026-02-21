@@ -8,11 +8,18 @@ export async function onRequest() {
   const lines = text
     .split("\n")
     .map(l => l.trim())
-    .filter(l => l);   // bỏ dòng trống
+    .filter(l => l && l !== "nan"); // bỏ rác
 
   const products = [];
 
-  for (let i = 8; i < lines.length; i += 8) {
+  /* 🔥 Tìm dòng SKU đầu tiên */
+  let startIndex = lines.findIndex(l => /^\d+$/.test(l));
+
+  if (startIndex === -1) {
+    return new Response("Feed error", { status: 500 });
+  }
+
+  for (let i = startIndex; i < lines.length; i += 8) {
 
     const sku = lines[i];
     const name = lines[i + 1];
@@ -23,7 +30,7 @@ export async function onRequest() {
     const desc = lines[i + 6];
     const category = lines[i + 7];
 
-    if (!sku || sku === "nan") continue;
+    if (!sku || !name) continue;
 
     products.push({
       sku,

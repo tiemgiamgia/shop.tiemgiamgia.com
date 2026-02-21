@@ -3,7 +3,24 @@ import Header from "@/layout/Header";
 import Footer from "@/layout/Footer";
 
 export default async function Home() {
+
   const products = await loadFeed();
+
+  /* 🔥 Fallback cực quan trọng */
+  if (!products || !products.length) {
+    return (
+      <>
+        <Header />
+
+        <main className="container">
+          <h1>Tiệm Giảm Giá</h1>
+          <p>Đang tải sản phẩm...</p>
+        </main>
+
+        <Footer />
+      </>
+    );
+  }
 
   return (
     <>
@@ -15,8 +32,10 @@ export default async function Home() {
         <div className="grid">
           {products.slice(0, 20).map(p => (
             <a key={p.sku} href={`/${p.slug}`} className="card">
-              <img src={p.image} />
+              <img src={p.image} alt={p.name} />
+
               <div>{p.name}</div>
+
               <div className="price">
                 {p.price.toLocaleString()}đ
               </div>

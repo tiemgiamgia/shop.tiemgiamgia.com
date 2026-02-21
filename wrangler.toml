@@ -1,6 +1,0 @@
-name = "tiemgiamgia-shop"
-compatibility_date = "2026-02-21"
-
-kv_namespaces = [
-  { binding = "PRODUCTS", id = "ab8b34413f26438bbe2122a4d128927b" }
-]

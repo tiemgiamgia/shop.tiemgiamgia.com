@@ -1,12 +1,51 @@
 import fs from "fs";
 
 const FEED_URL = "https://feeds.tiemgiamgia.com/shopee.csv";
-const OUTPUT_FILE = "./public/index.json";
 
 /* ===============================
-   🔥 SLUGIFY SEO SAFE
+   CSV PARSER SAFE
 =============================== */
-function slugify(text = "") {
+function parseCSV(text) {
+  const lines = text.split("\n").filter(Boolean);
+  const headers = splitCSVLine(lines[0]);
+
+  return lines.slice(1).map(line => {
+    const values = splitCSVLine(line);
+    const row = {};
+
+    headers.forEach((h, i) => {
+      row[h] = values[i] || "";
+    });
+
+    return row;
+  });
+}
+
+function splitCSVLine(line) {
+  const result = [];
+  let current = "";
+  let insideQuotes = false;
+
+  for (let char of line) {
+    if (char === '"') {
+      insideQuotes = !insideQuotes;
+      continue;
+    }
+
+    if (char === "," && !insideQuotes) {
+      result.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  result.push(current.trim());
+  return result;
+}
+
+function slugify(text) {
   return text
     .toLowerCase()
     .normalize("NFD")
@@ -16,92 +55,55 @@ function slugify(text = "") {
     .replace(/(^-|-$)/g, "");
 }
 
-/* ===============================
-   🧼 CLEAN DESCRIPTION
-=============================== */
 function cleanDescription(desc = "") {
   return desc
-    .replace(/&amp;/g, "&")
-    .replace(/\s+/g, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
     .trim();
 }
 
 /* ===============================
-   🚀 MAIN PARSER (BLOCK MODE)
+   MAIN
 =============================== */
 async function generate() {
-  try {
-    console.log("🔥 Fetching Shopee feed...");
+  console.log("🔥 Fetching feed...");
 
-    const res = await fetch(FEED_URL);
-    if (!res.ok) throw new Error("Feed fetch failed");
+  const res = await fetch(FEED_URL);
+  const csvText = await res.text();
 
-    const text = await res.text();
+  const rows = parseCSV(csvText);
 
-    console.log("🔥 Parsing feed (block mode)...");
+  console.log(`🔥 Found ${rows.length} rows`);
 
-    const lines = text
-      .split("\n")
-      .map(l => l.trim())
-      .filter(Boolean);
+  const products = rows.map((row) => {
 
-    /* ✅ Header detection */
-    const headers = lines.slice(0, 8);
+    const title = row.name;
+    const sku = row.sku;
 
-    console.log("🔥 Headers:", headers);
+    if (!title || !sku) return null;
 
-    const products = [];
+    const slug = `${slugify(title)}-${sku}`;
 
-    for (let i = 8; i < lines.length; i += 8) {
+    return {
+      title,
+      sku,
+      slug,
+      price: Number(row.price || 0),
+      image: row.image,
+      description: cleanDescription(row.desc),
+    };
+  }).filter(Boolean);
 
-      const sku       = lines[i];
-      const name      = lines[i + 1];
-      const url       = lines[i + 2];
-      const priceRaw  = lines[i + 3];
-      const discount  = lines[i + 4];
-      const image     = lines[i + 5];
-      const desc      = lines[i + 6];
-      const category  = lines[i + 7];
+  console.log(`✅ ${products.length} valid products`);
 
-      if (!name || !sku) continue;
+  /* SAVE FOR BULK IMPORT */
+  fs.writeFileSync(
+    "./kv-data.json",
+    JSON.stringify(products, null, 2)
+  );
 
-      const baseSlug = slugify(name);
-      const slug = `${baseSlug}-${sku}`;
-
-      products.push({
-        title: name,
-        slug,
-        sku,
-
-        price: Number(priceRaw || 0),
-        discount: Number(discount || 0),
-
-        image,
-        description: cleanDescription(desc),
-        category,
-
-        /* ✅ URL SEO */
-        url: `/${slug}/`
-      });
-    }
-
-    if (!fs.existsSync("./public")) {
-      fs.mkdirSync("./public");
-    }
-
-    fs.writeFileSync(
-      OUTPUT_FILE,
-      JSON.stringify(products)
-    );
-
-    console.log("✅ index.json generated");
-    console.log(`✅ ${products.length} products ready`);
-
-  } catch (err) {
-    console.error("💀 GENERATE FAILED");
-    console.error(err);
-    process.exit(1);
-  }
+  console.log("✅ kv-data.json ready");
 }
 
 generate();

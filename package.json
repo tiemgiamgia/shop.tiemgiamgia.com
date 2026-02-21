@@ -1,14 +1,19 @@
 {
   "name": "tiemgiamgia-shop",
   "private": true,
+
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+
+    "build": "npx @cloudflare/next-on-pages build",
+
     "start": "next start"
   },
+
   "dependencies": {
     "next": "^15.0.0",
     "react": "^18.3.0",
-    "react-dom": "^18.3.0"
+    "react-dom": "^18.3.0",
+    "@cloudflare/next-on-pages": "^1.0.0"
   }
 }

@@ -26,6 +26,9 @@ const KEYWORD_WEIGHT = {
   bluetooth: 4
 };
 
+/* 🔥 LIGHT MODE → FIX Cloudflare 25MB */
+const LIGHT_MODE = true;
+
 /* ================= UTIL ================= */
 
 function safeText(text = "") {
@@ -71,7 +74,7 @@ function detectDelimiter(csv) {
 
 async function run() {
   try {
-    console.log("Fetching CSV...");
+    console.log("🚀 Fetching CSV...");
 
     const res = await fetch(CSV_URL);
 
@@ -80,7 +83,7 @@ async function run() {
     const buffer = await res.arrayBuffer();
 
     console.log(
-      "Feed size:",
+      "✅ Feed size:",
       (buffer.byteLength / 1024 / 1024).toFixed(2),
       "MB"
     );
@@ -89,11 +92,14 @@ async function run() {
 
     try {
       text = new TextDecoder("utf-8").decode(buffer);
+      console.log("✅ Encoding: UTF-8");
     } catch {
+      console.log("⚠ UTF-8 failed → fallback Windows-1258");
       text = new TextDecoder("windows-1258").decode(buffer);
     }
 
     const delimiter = detectDelimiter(text);
+    console.log("✅ Delimiter:", delimiter);
 
     const records = parse(text, {
       columns: true,
@@ -104,38 +110,53 @@ async function run() {
       delimiter
     });
 
-    console.log("CSV rows:", records.length);
+    console.log("✅ CSV rows:", records.length);
 
     const products = [];
     const keywordMap = new Map();
-    const slugSet = new Set();
+    const skuSet = new Set();
+
+    let missingPrice = 0;
+    let missingImage = 0;
 
     for (const row of records) {
-      if (!row.name) continue;
+
+      if (!row.name || !row.sku) continue;
+
+      const sku = safeText(row.sku);
+
+      /* 🔥 REMOVE DUPLICATE SKU */
+      if (skuSet.has(sku)) continue;
+      skuSet.add(sku);
 
       const safeTitle = safeText(row.name);
-      const id = row.sku;
 
-      let slug = slugify(safeTitle);
-      if (id) slug += `-${id}`;
-
-      if (slugSet.has(slug)) continue;
-      slugSet.add(slug);
+      let slug = slugify(safeTitle) + "-" + sku;
 
       const safePrice = safeNumber(row.price);
       const safeDiscount = safeNumber(row.discount);
+      const safeImage = safeText(row.image);
 
-      products.push({
+      if (!safePrice) missingPrice++;
+      if (!safeImage) missingImage++;
+
+      const product = {
         title: safeTitle,
         slug,
         price: safePrice,
         discount: safeDiscount,
-        image: safeText(row.image),
-        brand: safeText(row.brand),
-        category: safeText(row.category),
-        desc: safeText(row.desc),
+        image: safeImage,
         affiliate: `https://go.isclix.com/deep_link/5275212048974723439/4751584435713464237?url=${safeText(row.url)}`
-      });
+      };
+
+      /* 🔥 LIGHT MODE → bỏ field nặng */
+      if (!LIGHT_MODE) {
+        product.brand = safeText(row.brand);
+        product.category = safeText(row.category);
+        product.desc = safeText(row.desc);
+      }
+
+      products.push(product);
 
       /* KEYWORD ENGINE */
 
@@ -149,7 +170,12 @@ async function run() {
       }
     }
 
+    console.log("✅ Unique SKU:", products.length);
+    console.log("📊 Missing price:", missingPrice);
+    console.log("📊 Missing image:", missingImage);
+
     if (products.length === 0) {
+      console.log("🚨 Feed empty → fallback");
       products.push({ title: "fallback product" });
     }
 
@@ -157,6 +183,7 @@ async function run() {
       fs.mkdirSync(OUTPUT_DIR, { recursive: true });
     }
 
+    /* 🔥 MINIFY JSON → giảm size mạnh */
     fs.writeFileSync(INDEX_JSON, JSON.stringify(products));
 
     const sortedKeywords = [...keywordMap.entries()]
@@ -171,12 +198,12 @@ async function run() {
 
     fs.writeFileSync(TRENDING_JSON, JSON.stringify(trending));
 
-    console.log("Products:", products.length);
-    console.log("Keywords:", sortedKeywords.length);
-    console.log("Trending:", trending.length);
+    console.log("✅ Products:", products.length);
+    console.log("✅ Keywords:", sortedKeywords.length);
+    console.log("✅ Trending:", trending.length);
 
   } catch (err) {
-    console.error("ERROR:", err.message);
+    console.error("❌ ERROR:", err.message);
     process.exit(1);
   }
 }

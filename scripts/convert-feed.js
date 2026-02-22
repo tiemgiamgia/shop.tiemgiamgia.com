@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { parse } from "csv-parse/sync";
 
 function buildSlug(name, sku) {
   return (
@@ -45,49 +46,35 @@ async function run() {
       text = new TextDecoder("windows-1258").decode(buffer);
     }
 
-    const rows = text.split(/\r?\n/);
+    /* 🔥 PARSE CSV CHUẨN */
 
-    console.log("CSV rows:", rows.length);
+    const records = parse(text, {
+      columns: true,
+      skip_empty_lines: true,
+      relax_quotes: true,
+      relax_column_count: true
+    });
 
-    const header = rows[0].split(",");
+    console.log("CSV parsed:", records.length);
 
-    console.log("Header:", header);
-
-    const skuIndex = header.indexOf("sku");
-    const nameIndex = header.indexOf("name");
-    const urlIndex = header.indexOf("url");
-    const priceIndex = header.indexOf("price");
-    const discountIndex = header.indexOf("discount");
-    const imageIndex = header.indexOf("image");
-    const descIndex = header.indexOf("desc");
-
-    const rawProducts = [];
-
-    for (let i = 1; i < rows.length; i++) {
-      const cols = rows[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-
-      if (!cols[skuIndex]) continue;
-
-      rawProducts.push({
-        sku: cols[skuIndex],
-        name: cols[nameIndex],
-        url: cols[urlIndex],
-        price: cols[priceIndex] ? Number(cols[priceIndex]) : null,
-        discount: cols[discountIndex]
-          ? Number(cols[discountIndex])
-          : null,
-        image: cols[imageIndex],
-        desc: cols[descIndex]
-      });
-    }
+    const rawProducts = records.map(r => ({
+      sku: r.sku,
+      name: r.name,
+      url: r.url,
+      price: r.price ? Number(r.price) : null,
+      discount: r.discount ? Number(r.discount) : null,
+      image: r.image,
+      desc: r.desc
+    }));
 
     console.log("Products (raw):", rawProducts.length);
 
-    /* 🔥 REMOVE DUPLICATE SKU */
+    /* 🔥 REMOVE DUPLICATE */
 
     const map = new Map();
 
     for (const p of rawProducts) {
+      if (!p.sku) continue;
       if (map.has(p.sku)) continue;
 
       map.set(p.sku, {
@@ -99,6 +86,14 @@ async function run() {
     const products = Array.from(map.values());
 
     console.log("Unique SKU:", products.length);
+
+    /* LOG KIỂM TRA */
+
+    const missingPrice = products.filter(p => !p.price).length;
+    const missingImage = products.filter(p => !p.image).length;
+
+    console.log("Missing price:", missingPrice);
+    console.log("Missing image:", missingImage);
 
     /* SAVE JSON */
 

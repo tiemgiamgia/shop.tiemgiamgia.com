@@ -2,30 +2,80 @@ import fs from "fs";
 import path from "path";
 import { parse } from "csv-parse/sync";
 
-function buildSlug(name, sku) {
-  return (
-    name
-      ?.toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/đ/g, "d")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "") +
-    "-" +
-    sku
-  );
+const CSV_URL = "https://feeds.tiemgiamgia.com/shopee.csv";
+
+const OUTPUT_DIR = path.join(process.cwd(), "public/data");
+
+const INDEX_JSON = path.join(OUTPUT_DIR, "products.json");
+const KEYWORD_JSON = path.join(OUTPUT_DIR, "keyword.json");
+const TRENDING_JSON = path.join(OUTPUT_DIR, "trending.json");
+
+/* ================= CONFIG ================= */
+
+const STOP_WORDS = new Set([
+  "sieu","chinh","hang","gia","re",
+  "hot","new","sale","combo"
+]);
+
+const KEYWORD_WEIGHT = {
+  ao: 8,
+  quan: 8,
+  honda: 7,
+  winner: 7,
+  yamaha: 7,
+  bluetooth: 4
+};
+
+/* ================= UTIL ================= */
+
+function safeText(text = "") {
+  return String(text)
+    .replace(/"/g, "")
+    .replace(/\n/g, " ")
+    .replace(/\r/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
+
+function safeNumber(val) {
+  const num = Number(String(val).replace(/[^\d]/g, ""));
+  return isNaN(num) ? 0 : num;
+}
+
+function slugify(text) {
+  return safeText(text)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function cleanWords(title) {
+  return slugify(title)
+    .split("-")
+    .filter(w => w.length > 1 && !STOP_WORDS.has(w));
+}
+
+function getWeight(word) {
+  return KEYWORD_WEIGHT[word] || 1;
+}
+
+function detectDelimiter(csv) {
+  const firstLine = csv.split("\n")[0];
+  return firstLine.includes(";") ? ";" : ",";
+}
+
+/* ================= RUN ================= */
 
 async function run() {
   try {
-    console.log("Fetching feed...");
+    console.log("Fetching CSV...");
 
-    const res = await fetch("https://feeds.tiemgiamgia.com/shopee.csv");
+    const res = await fetch(CSV_URL);
 
-    if (!res.ok) {
-      console.error("Feed fetch failed");
-      return;
-    }
+    if (!res.ok) throw new Error("CSV download failed");
 
     const buffer = await res.arrayBuffer();
 
@@ -35,84 +85,99 @@ async function run() {
       "MB"
     );
 
-    /* 🔥 FIX ENCODING */
-
     let text;
 
     try {
       text = new TextDecoder("utf-8").decode(buffer);
     } catch {
-      console.log("UTF-8 failed → fallback Windows-1258");
       text = new TextDecoder("windows-1258").decode(buffer);
     }
 
-    /* 🔥 PARSE CSV CHUẨN */
+    const delimiter = detectDelimiter(text);
 
     const records = parse(text, {
       columns: true,
       skip_empty_lines: true,
       relax_quotes: true,
-      relax_column_count: true
+      relax_column_count: true,
+      bom: true,
+      delimiter
     });
 
-    console.log("CSV parsed:", records.length);
+    console.log("CSV rows:", records.length);
 
-    const rawProducts = records.map(r => ({
-      sku: r.sku,
-      name: r.name,
-      url: r.url,
-      price: r.price ? Number(r.price) : null,
-      discount: r.discount ? Number(r.discount) : null,
-      image: r.image,
-      desc: r.desc
-    }));
+    const products = [];
+    const keywordMap = new Map();
+    const slugSet = new Set();
 
-    console.log("Products (raw):", rawProducts.length);
+    for (const row of records) {
+      if (!row.name) continue;
 
-    /* 🔥 REMOVE DUPLICATE */
+      const safeTitle = safeText(row.name);
+      const id = row.sku;
 
-    const map = new Map();
+      let slug = slugify(safeTitle);
+      if (id) slug += `-${id}`;
 
-    for (const p of rawProducts) {
-      if (!p.sku) continue;
-      if (map.has(p.sku)) continue;
+      if (slugSet.has(slug)) continue;
+      slugSet.add(slug);
 
-      map.set(p.sku, {
-        ...p,
-        slug: buildSlug(p.name, p.sku)
+      const safePrice = safeNumber(row.price);
+      const safeDiscount = safeNumber(row.discount);
+
+      products.push({
+        title: safeTitle,
+        slug,
+        price: safePrice,
+        discount: safeDiscount,
+        image: safeText(row.image),
+        brand: safeText(row.brand),
+        category: safeText(row.category),
+        desc: safeText(row.desc),
+        affiliate: `https://go.isclix.com/deep_link/5275212048974723439/4751584435713464237?url=${safeText(row.url)}`
       });
+
+      /* KEYWORD ENGINE */
+
+      const words = cleanWords(safeTitle);
+
+      for (const word of words) {
+        keywordMap.set(
+          word,
+          (keywordMap.get(word) || 0) + getWeight(word)
+        );
+      }
     }
 
-    const products = Array.from(map.values());
-
-    console.log("Unique SKU:", products.length);
-
-    /* LOG KIỂM TRA */
-
-    const missingPrice = products.filter(p => !p.price).length;
-    const missingImage = products.filter(p => !p.image).length;
-
-    console.log("Missing price:", missingPrice);
-    console.log("Missing image:", missingImage);
-
-    /* SAVE JSON */
-
-    const outputDir = path.join(process.cwd(), "public/data");
-
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
+    if (products.length === 0) {
+      products.push({ title: "fallback product" });
     }
 
-    fs.writeFileSync(
-      path.join(outputDir, "feed.json"),
-      JSON.stringify(products, null, 2),
-      "utf-8"
-    );
+    if (!fs.existsSync(OUTPUT_DIR)) {
+      fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+    }
 
-    console.log("Feed saved → public/data/feed.json");
+    fs.writeFileSync(INDEX_JSON, JSON.stringify(products));
+
+    const sortedKeywords = [...keywordMap.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([keyword, score]) => ({ keyword, score }));
+
+    fs.writeFileSync(KEYWORD_JSON, JSON.stringify(sortedKeywords));
+
+    const trending = sortedKeywords
+      .slice(0, 120)
+      .map(k => k.keyword);
+
+    fs.writeFileSync(TRENDING_JSON, JSON.stringify(trending));
+
+    console.log("Products:", products.length);
+    console.log("Keywords:", sortedKeywords.length);
+    console.log("Trending:", trending.length);
 
   } catch (err) {
-    console.error("Feed crash:", err);
+    console.error("ERROR:", err.message);
+    process.exit(1);
   }
 }
 

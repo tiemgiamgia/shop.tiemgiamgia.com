@@ -7,55 +7,64 @@ const CSV_URL = "https://feeds.tiemgiamgia.com/shopee.csv";
 const DATA_DIR = path.join(process.cwd(), "public/data");
 const PRODUCT_DIR = path.join(DATA_DIR, "products");
 
-const CHUNK_SIZE = 5000; // 🔥 cực kỳ quan trọng (CF limit)
+const CHUNK_SIZE = 5000;
 
-/* ================= ENCODING FIX ================= */
+/* ================= ENCODING MONSTER FIX ================= */
 
-/* 🔥 Repair UTF8 vỡ kiểu Shopee */
+/* 🔥 Repair multi-broken Vietnamese */
 
 function repairVietnamese(text = "") {
   try {
-    return Buffer.from(text, "latin1").toString("utf8");
+    return Buffer
+      .from(text, "latin1")     // tầng 1
+      .toString("utf8")         // tầng 2
+      .normalize("NFC");        // chuẩn unicode
   } catch {
     return text;
   }
 }
 
-/* 🔥 Xoá byte rác / control char */
+/* 🔥 Clean byte rác */
 
 function cleanGarbage(text = "") {
   return text
-    .replace(/[\u0000-\u001F\u007F]/g, "")  // control chars
-    .replace(/\uFFFD/g, "")                 // ký tự �
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .replace(/\uFFFD/g, "")
     .trim();
 }
 
-/* 🔥 Decode CSV chuẩn Shopee */
+/* 🔥 Decode CSV chuẩn */
 
 function decodeBuffer(buffer) {
-  const utf8 = new TextDecoder("utf-8").decode(buffer);
 
-  /* Nếu phát hiện font vỡ → fallback */
+  /* thử UTF-8 */
 
-  if (utf8.includes("Ã") || utf8.includes("áº")) {
-    console.log("⚠ Broken UTF-8 → fallback Windows-1258");
-    return new TextDecoder("windows-1258").decode(buffer);
+  let text = new TextDecoder("utf-8").decode(buffer);
+
+  if (text.includes("Ã") || text.includes("áº")) {
+    console.log("⚠ UTF-8 broken → trying Windows-1258");
+
+    text = new TextDecoder("windows-1258").decode(buffer);
   }
 
-  console.log("✅ Encoding: UTF-8");
-  return utf8;
+  /* 🔥 Repair tầng sâu */
+
+  text = repairVietnamese(text);
+
+  return text;
 }
 
-/* ================= SAFE UTIL ================= */
+/* ================= SAFE ================= */
 
 function safeText(text = "") {
+
   let cleaned = String(text)
     .replace(/"/g, "")
     .replace(/\r/g, "")
     .replace(/\n/g, " ");
 
   cleaned = repairVietnamese(cleaned); // 🔥 FIX FONT
-  cleaned = cleanGarbage(cleaned);     // 🔥 FIX BYTE RÁC
+  cleaned = cleanGarbage(cleaned);     // 🔥 FIX BYTE
 
   return cleaned;
 }
@@ -81,6 +90,7 @@ function slugify(text) {
 
 async function run() {
   try {
+
     console.log("🚀 Fetching CSV...");
 
     const res = await fetch(CSV_URL);
@@ -106,14 +116,11 @@ async function run() {
 
     console.log("✅ CSV rows:", records.length);
 
-    /* CLEAN OUTPUT */
-
     fs.rmSync(DATA_DIR, { recursive: true, force: true });
     fs.mkdirSync(PRODUCT_DIR, { recursive: true });
 
     const search = [];
     const products = [];
-
     const skuSet = new Set();
 
     for (const row of records) {
@@ -122,19 +129,13 @@ async function run() {
 
       const sku = safeText(row.sku);
 
-      /* 🔥 REMOVE DUPLICATE SKU */
-
       if (skuSet.has(sku)) continue;
       skuSet.add(sku);
 
       const title = safeText(row.name);
       const slug = slugify(title);
 
-      /* 🔥 SEARCH INDEX (nhẹ) */
-
       search.push({ title, slug, sku });
-
-      /* 🔥 PRODUCT DATA */
 
       products.push({
         title,
@@ -147,7 +148,7 @@ async function run() {
       });
     }
 
-    /* 🔥 CHUNK PRODUCTS (Cloudflare Safe) */
+    /* 🔥 CHUNK */
 
     let chunkIndex = 1;
 
@@ -163,8 +164,6 @@ async function run() {
       chunkIndex++;
     }
 
-    /* 🔥 SEARCH INDEX */
-
     fs.writeFileSync(
       path.join(DATA_DIR, "search.json"),
       JSON.stringify(search)
@@ -172,8 +171,7 @@ async function run() {
 
     console.log("✅ Products:", products.length);
     console.log("✅ Chunks:", chunkIndex - 1);
-    console.log("✅ Search index:", search.length);
-    console.log("✅ DONE ✅");
+    console.log("✅ DONE 😈");
 
   } catch (err) {
     console.error("❌ ERROR:", err.message);

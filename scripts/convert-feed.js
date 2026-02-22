@@ -17,11 +17,7 @@ const STOP_WORDS = new Set([
   "hot","new","sale","combo"
 ]);
 
-/* 🔥 LIGHT MODE → FIX Cloudflare */
-const LIGHT_MODE = true;
-
-/* 🔥 LIMIT để JSON không nổ */
-const MAX_PRODUCTS_PER_KEYWORD = 20;
+const MAX_SLUG_PER_KEYWORD = 30;   // 🔥 QUAN TRỌNG NHẤT
 
 /* ================= UTIL ================= */
 
@@ -55,11 +51,6 @@ function cleanWords(title) {
     .filter(w => w.length > 1 && !STOP_WORDS.has(w));
 }
 
-function detectDelimiter(csv) {
-  const firstLine = csv.split("\n")[0];
-  return firstLine.includes(";") ? ";" : ",";
-}
-
 /* ================= RUN ================= */
 
 async function run() {
@@ -77,25 +68,14 @@ async function run() {
       "MB"
     );
 
-    let text;
-
-    try {
-      text = new TextDecoder("utf-8").decode(buffer);
-      console.log("✅ Encoding: UTF-8");
-    } catch {
-      console.log("⚠ UTF-8 failed → fallback Windows-1258");
-      text = new TextDecoder("windows-1258").decode(buffer);
-    }
-
-    const delimiter = detectDelimiter(text);
+    const text = new TextDecoder("utf-8").decode(buffer);
 
     const records = parse(text, {
       columns: true,
       skip_empty_lines: true,
       relax_quotes: true,
       relax_column_count: true,
-      bom: true,
-      delimiter
+      bom: true
     });
 
     console.log("✅ CSV rows:", records.length);
@@ -104,42 +84,30 @@ async function run() {
     const keywordEngine = {};
     const skuSet = new Set();
 
-    let missingPrice = 0;
-    let missingImage = 0;
-
     for (const row of records) {
 
       if (!row.name || !row.sku) continue;
 
       const sku = safeText(row.sku);
-
       if (skuSet.has(sku)) continue;
       skuSet.add(sku);
 
-      const safeTitle = safeText(row.name);
-
-      const slug = slugify(safeTitle) + "-" + sku;
-
-      const safePrice = safeNumber(row.price);
-      const safeDiscount = safeNumber(row.discount);
-      const safeImage = safeText(row.image);
-
-      if (!safePrice) missingPrice++;
-      if (!safeImage) missingImage++;
+      const title = safeText(row.name);
+      const slug = slugify(title) + "-" + sku;
 
       const product = {
-        title: safeTitle,
+        title,
         slug,
-        price: safePrice,
-        discount: safeDiscount,
-        image: safeImage
+        price: safeNumber(row.price),
+        discount: safeNumber(row.discount),
+        image: safeText(row.image)
       };
 
       products.push(product);
 
-      /* 🔥 SEARCH ENGINE */
+      /* 🔥 KEYWORD → ONLY STORE SLUG */
 
-      const words = cleanWords(safeTitle);
+      const words = cleanWords(title);
 
       for (const word of words) {
 
@@ -147,12 +115,12 @@ async function run() {
           keywordEngine[word] = [];
         }
 
-        if (keywordEngine[word].length < MAX_PRODUCTS_PER_KEYWORD) {
-          keywordEngine[word].push(product);
+        if (keywordEngine[word].length < MAX_SLUG_PER_KEYWORD) {
+          keywordEngine[word].push(slug);
         }
       }
 
-      /* 🔥 PHRASE ENGINE (ao-so-mi) */
+      /* 🔥 PHRASE ENGINE */
 
       for (let i = 0; i < words.length - 1; i++) {
 
@@ -162,15 +130,11 @@ async function run() {
           keywordEngine[phrase] = [];
         }
 
-        if (keywordEngine[phrase].length < MAX_PRODUCTS_PER_KEYWORD) {
-          keywordEngine[phrase].push(product);
+        if (keywordEngine[phrase].length < MAX_SLUG_PER_KEYWORD) {
+          keywordEngine[phrase].push(slug);
         }
       }
     }
-
-    console.log("✅ Unique SKU:", products.length);
-    console.log("📊 Missing price:", missingPrice);
-    console.log("📊 Missing image:", missingImage);
 
     if (!fs.existsSync(OUTPUT_DIR)) {
       fs.mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -179,14 +143,13 @@ async function run() {
     fs.writeFileSync(INDEX_JSON, JSON.stringify(products));
     fs.writeFileSync(KEYWORD_JSON, JSON.stringify(keywordEngine));
 
-    const trending = Object.keys(keywordEngine)
-      .slice(0, 120);
+    const trending = Object.keys(keywordEngine).slice(0, 120);
 
     fs.writeFileSync(TRENDING_JSON, JSON.stringify(trending));
 
     console.log("✅ Products:", products.length);
     console.log("✅ Keywords:", Object.keys(keywordEngine).length);
-    console.log("✅ Trending:", trending.length);
+    console.log("✅ keyword.json size FIXED ✅");
 
   } catch (err) {
     console.error("❌ ERROR:", err.message);

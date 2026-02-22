@@ -18,12 +18,16 @@ function fixBrokenVietnamese(text = "") {
 }
 
 function safeText(text = "") {
-  const cleaned = String(text)
+
+  let cleaned = String(text)
     .replace(/"/g, "")
     .replace(/\r/g, "")
-    .trim();
+    .replace(/\n/g, " ");
 
-  return fixBrokenVietnamese(cleaned);
+  cleaned = repairVietnamese(cleaned);   // 🔥 repair UTF8 vỡ
+  cleaned = cleanGarbage(cleaned);       // 🔥 xóa byte rác
+
+  return cleaned;
 }
 function safeNumber(val) {
   const num = Number(String(val).replace(/[^\d]/g, ""));

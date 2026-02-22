@@ -15,6 +15,33 @@ function buildSlug(name, sku) {
   );
 }
 
+function parseCSV(csv) {
+  const rows = [];
+  let current = "";
+  let insideQuotes = false;
+
+  for (let i = 0; i < csv.length; i++) {
+    const char = csv[i];
+
+    if (char === '"') {
+      insideQuotes = !insideQuotes;
+      continue;
+    }
+
+    if (char === "\n" && !insideQuotes) {
+      rows.push(current);
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current) rows.push(current);
+
+  return rows.map(row => row.split(","));
+}
+
 async function run() {
   try {
     console.log("Fetching feed...");
@@ -22,59 +49,93 @@ async function run() {
     const res = await fetch("https://feeds.tiemgiamgia.com/shopee.csv");
 
     if (!res.ok) {
-      console.error("Feed fetch failed");
+      console.error("Feed fetch failed:", res.status);
       return;
     }
 
-    const text = await res.text();
+    /* ✅ FIX BOM + ENCODING */
 
-    const lines = text
-      .split("\n")
-      .map(l => l.trim())
-      .filter(l => l && l !== "nan");
+    const buffer = await res.arrayBuffer();
+    const text = new TextDecoder("utf-8").decode(buffer);
 
-    const startIndex = lines.findIndex(l => /^\d+$/.test(l));
+    console.log("Feed size:", (text.length / 1024 / 1024).toFixed(2), "MB");
 
-    if (startIndex === -1) {
-      console.error("Feed structure error");
+    const rows = parseCSV(text);
+
+    console.log("CSV rows:", rows.length);
+
+    /* HEADER */
+
+    const header = rows[0];
+
+    console.log("Header:", header);
+
+    const skuIndex = header.indexOf("sku");
+    const nameIndex = header.indexOf("name");
+    const urlIndex = header.indexOf("url");
+    const priceIndex = header.indexOf("price");
+    const discountIndex = header.indexOf("discount");
+    const imageIndex = header.indexOf("image");
+    const descIndex = header.indexOf("desc");
+
+    if (skuIndex === -1) {
+      console.error("CSV STRUCTURE ERROR");
       return;
     }
 
     const rawProducts = [];
 
-    for (let i = startIndex; i < lines.length; i += 8) {
-      if (!lines[i] || !lines[i + 1]) continue;
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+
+      if (!row[skuIndex]) continue;
 
       rawProducts.push({
-        sku: lines[i],
-        name: lines[i + 1],
-        url: lines[i + 2],
-        price: Number(lines[i + 3] || 0),
-        discount: Number(lines[i + 4] || 0),
-        image: lines[i + 5],
-        desc: lines[i + 6]
-        // ❌ bỏ lines[i + 7]
+        sku: row[skuIndex]?.trim(),
+        name: row[nameIndex]?.trim(),
+        url: row[urlIndex]?.trim(),
+        price: Number(row[priceIndex] || 0),
+        discount: Number(row[discountIndex] || 0),
+        image: row[imageIndex]?.trim(),
+        desc: row[descIndex]?.trim()
       });
     }
 
     console.log("Products (raw):", rawProducts.length);
 
-    /* 🔥 REMOVE DUPLICATE SKU */
+    /* DEBUG THIẾU FIELD */
+
+    let missingName = 0;
+    let missingImage = 0;
+    let missingPrice = 0;
+
+    rawProducts.forEach(p => {
+      if (!p.name) missingName++;
+      if (!p.image) missingImage++;
+      if (!p.price) missingPrice++;
+    });
+
+    console.log("Missing name:", missingName);
+    console.log("Missing image:", missingImage);
+    console.log("Missing price:", missingPrice);
+
+    /* REMOVE DUP SKU */
 
     const map = new Map();
 
-    for (const p of rawProducts) {
-      if (map.has(p.sku)) continue;
+    rawProducts.forEach(p => {
+      if (!p.sku) return;
+      if (map.has(p.sku)) return;
 
       map.set(p.sku, {
         ...p,
         slug: buildSlug(p.name, p.sku)
       });
-    }
+    });
 
     const products = Array.from(map.values());
 
-    console.log("Final products:", products.length);
+    console.log("Unique SKU:", products.length);
 
     /* SAVE JSON */
 
@@ -86,7 +147,8 @@ async function run() {
 
     fs.writeFileSync(
       path.join(outputDir, "feed.json"),
-      JSON.stringify(products)
+      JSON.stringify(products, null, 2),
+      "utf-8"
     );
 
     console.log("Feed saved → public/data/feed.json");

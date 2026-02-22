@@ -5,8 +5,8 @@ import { parse } from "csv-parse/sync";
 const CSV_URL = "https://feeds.tiemgiamgia.com/shopee.csv";
 
 const OUTPUT_DIR = path.join(process.cwd(), "public/data");
+const PRODUCTS_DIR = path.join(OUTPUT_DIR, "products");
 
-const INDEX_JSON = path.join(OUTPUT_DIR, "products.json");
 const KEYWORD_JSON = path.join(OUTPUT_DIR, "keyword.json");
 const TRENDING_JSON = path.join(OUTPUT_DIR, "trending.json");
 
@@ -17,9 +17,10 @@ const STOP_WORDS = new Set([
   "hot","new","sale","combo"
 ]);
 
-const MAX_PRODUCTS_PER_KEYWORD = 20;   // 🔥 giảm mạnh
-const MIN_VOLUME = 3;                  // 🔥 keyword phải có >=3 sản phẩm
-const MAX_KEYWORDS = 4000;             // 🔥 chặn trần size
+const CHUNK_SIZE = 500;                 // 🔥 QUAN TRỌNG
+const MAX_PRODUCTS_PER_KEYWORD = 20;
+const MIN_VOLUME = 3;
+const MAX_KEYWORDS = 4000;
 
 /* ================= UTIL ================= */
 
@@ -137,8 +138,8 @@ async function run() {
         slug,
         price: safeNumber(row.price),
         discount: safeNumber(row.discount),
-        image: safeText(row.image),
-        desc: safeText(row.desc)
+        image: safeText(row.image)
+        // ❌ KHÔNG desc → giảm size cực mạnh
       });
 
       const keywords = extractKeywords(title);
@@ -159,7 +160,28 @@ async function run() {
 
     console.log("✅ Products:", products.length);
 
-    /* 🔥 FILTER KEYWORD VOLUME */
+    /* 🔥 CHUNK PRODUCTS */
+
+    fs.rmSync(PRODUCTS_DIR, { recursive: true, force: true });
+    fs.mkdirSync(PRODUCTS_DIR, { recursive: true });
+
+    let page = 1;
+
+    for (let i = 0; i < products.length; i += CHUNK_SIZE) {
+
+      const chunk = products.slice(i, i + CHUNK_SIZE);
+
+      fs.writeFileSync(
+        path.join(PRODUCTS_DIR, `page-${page}.json`),
+        JSON.stringify(chunk)
+      );
+
+      page++;
+    }
+
+    console.log("✅ Pages:", page - 1);
+
+    /* 🔥 FILTER KEYWORDS */
 
     const filteredKeywords = [...keywordMap.entries()]
       .filter(([_, list]) => list.length >= MIN_VOLUME)
@@ -176,12 +198,12 @@ async function run() {
       fs.mkdirSync(OUTPUT_DIR, { recursive: true });
     }
 
-    fs.writeFileSync(INDEX_JSON, JSON.stringify(products));
     fs.writeFileSync(KEYWORD_JSON, JSON.stringify(keywordEngine));
     fs.writeFileSync(TRENDING_JSON, JSON.stringify(trending));
 
     console.log("✅ Keywords:", filteredKeywords.length);
     console.log("✅ Trending:", trending.length);
+    console.log("✅ DONE — Cloudflare Safe ✅");
 
   } catch (err) {
     console.error("❌ ERROR:", err.message);

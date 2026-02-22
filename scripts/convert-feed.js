@@ -6,6 +6,7 @@ const CSV_URL = "https://feeds.tiemgiamgia.com/shopee.csv";
 
 const DATA_DIR = path.join(process.cwd(), "public/data");
 const PRODUCT_DIR = path.join(DATA_DIR, "products");
+const SEARCH_DIR = path.join(DATA_DIR, "search");
 
 const CHUNK_SIZE = 5000;
 
@@ -16,7 +17,6 @@ function safeText(text = "") {
     .replace(/"/g, "")
     .replace(/\r/g, "")
     .replace(/\n/g, " ")
-    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -25,15 +25,7 @@ function safeNumber(val) {
   return isNaN(num) ? 0 : num;
 }
 
-/* ================= DECODE ================= */
-
-function decodeBuffer(buffer) {
-  return new TextDecoder("utf-8").decode(buffer);
-}
-
-/* ================= SLUG ================= */
-
-function slugify(text) {
+function slugify(text = "") {
   return safeText(text)
     .toLowerCase()
     .normalize("NFD")
@@ -53,31 +45,24 @@ async function run() {
     const res = await fetch(CSV_URL);
     if (!res.ok) throw new Error("CSV download failed");
 
-    const buffer = await res.arrayBuffer();
-
-    console.log(
-      "✅ Feed size:",
-      (buffer.byteLength / 1024 / 1024).toFixed(2),
-      "MB"
-    );
-
-    const text = decodeBuffer(buffer);
+    const text = await res.text();
 
     const records = parse(text, {
       columns: true,
       skip_empty_lines: true,
       relax_quotes: true,
       relax_column_count: true,
-      bom: true
     });
 
     console.log("✅ CSV rows:", records.length);
 
     fs.rmSync(DATA_DIR, { recursive: true, force: true });
-    fs.mkdirSync(PRODUCT_DIR, { recursive: true });
 
-    const search = [];
+    fs.mkdirSync(PRODUCT_DIR, { recursive: true });
+    fs.mkdirSync(SEARCH_DIR, { recursive: true });
+
     const products = [];
+    const search = [];
     const skuSet = new Set();
 
     for (const row of records) {
@@ -85,14 +70,12 @@ async function run() {
       if (!row.name || !row.sku) continue;
 
       const sku = safeText(row.sku);
-
       if (skuSet.has(sku)) continue;
+
       skuSet.add(sku);
 
       const title = safeText(row.name);
       const slug = slugify(title);
-
-      search.push({ title, slug, sku });
 
       products.push({
         title,
@@ -101,37 +84,52 @@ async function run() {
         price: safeNumber(row.price),
         discount: safeNumber(row.discount),
         image: safeText(row.image),
-        desc: safeText(row.desc)
+        desc: safeText(row.desc),
+        url: safeText(row.url),
       });
+
+      search.push({ title, slug, sku });
     }
 
-    /* 🔥 CHUNK */
+    /* 🔥 CHUNK PRODUCTS */
 
-    let chunkIndex = 1;
+    let page = 1;
 
     for (let i = 0; i < products.length; i += CHUNK_SIZE) {
 
       const chunk = products.slice(i, i + CHUNK_SIZE);
 
       fs.writeFileSync(
-        path.join(PRODUCT_DIR, `${chunkIndex}.json`),
+        path.join(PRODUCT_DIR, `${page}.json`),
         JSON.stringify(chunk)
       );
 
-      chunkIndex++;
+      page++;
     }
 
-    fs.writeFileSync(
-      path.join(DATA_DIR, "search.json"),
-      JSON.stringify(search)
-    );
+    /* 🔥 CHUNK SEARCH */
+
+    page = 1;
+
+    for (let i = 0; i < search.length; i += CHUNK_SIZE) {
+
+      const chunk = search.slice(i, i + CHUNK_SIZE);
+
+      fs.writeFileSync(
+        path.join(SEARCH_DIR, `${page}.json`),
+        JSON.stringify(chunk)
+      );
+
+      page++;
+    }
 
     console.log("✅ Products:", products.length);
-    console.log("✅ Chunks:", chunkIndex - 1);
-    console.log("✅ DONE ✅");
+    console.log("✅ DONE 😈");
 
   } catch (err) {
+
     console.error("❌ ERROR:", err.message);
+
     process.exit(1);
   }
 }

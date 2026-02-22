@@ -3,14 +3,14 @@ import path from "path";
 import { parse } from "csv-parse/sync";
 
 const CSV_URL = "https://feeds.tiemgiamgia.com/shopee.csv";
-const OUTPUT_DIR = path.join(process.cwd(), "public/data");
+
+const DATA_DIR = path.join(process.cwd(), "public/data");
+const PRODUCT_DIR = path.join(DATA_DIR, "products");
 
 function safeText(text = "") {
   return String(text)
     .replace(/"/g, "")
-    .replace(/\n/g, " ")
-    .replace(/\r/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/\r/g, "")
     .trim();
 }
 
@@ -51,7 +51,9 @@ async function run() {
       bom: true
     });
 
-    const products = [];
+    fs.rmSync(PRODUCT_DIR, { recursive: true, force: true });
+    fs.mkdirSync(PRODUCT_DIR, { recursive: true });
+
     const search = [];
     const skuSet = new Set();
 
@@ -65,37 +67,31 @@ async function run() {
       const title = safeText(row.name);
       const slug = slugify(title) + "-" + sku;
 
-      /* ✅ SEARCH INDEX (NHẸ) */
-      search.push({
-        title,
-        slug
-      });
+      /* ✅ SEARCH INDEX */
+      search.push({ title, slug });
 
-      /* ✅ FULL DATA */
-      products.push({
+      /* ✅ PRODUCT FILE RIÊNG */
+      const product = {
         title,
         slug,
         price: safeNumber(row.price),
         discount: safeNumber(row.discount),
         image: safeText(row.image),
         desc: safeText(row.desc)
-      });
+      };
+
+      fs.writeFileSync(
+        path.join(PRODUCT_DIR, slug + ".json"),
+        JSON.stringify(product)
+      );
     }
 
-    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-
     fs.writeFileSync(
-      path.join(OUTPUT_DIR, "search.json"),
+      path.join(DATA_DIR, "search.json"),
       JSON.stringify(search)
     );
 
-    fs.writeFileSync(
-      path.join(OUTPUT_DIR, "products.json"),
-      JSON.stringify(products)
-    );
-
-    console.log("✅ Products:", products.length);
-    console.log("✅ Search index:", search.length);
+    console.log("✅ Products:", search.length);
     console.log("✅ DONE ✅");
 
   } catch (err) {

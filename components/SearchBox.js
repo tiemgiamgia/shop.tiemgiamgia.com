@@ -1,114 +1,58 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import data from "@/public/data/search.json";
-
-function normalize(text = "") {
-  return text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d");
-}
-
-/* 🔥 Ranking giống Shopee */
-
-function score(item, keyword) {
-  if (item.t.startsWith(keyword)) return 100;
-  if (item.t.includes(" " + keyword)) return 60;
-  if (item.t.includes(keyword)) return 30;
-  return 0;
-}
-
-function rankedSearch(keyword) {
-  const ranked = [];
-
-  for (const item of data) {
-    const s = score(item, keyword);
-
-    if (s > 0) {
-      ranked.push({ ...item, s });
-
-      if (ranked.length >= 40) break;   // 🔥 chống lag
-    }
-  }
-
-  ranked.sort((a, b) => b.s - a.s);
-
-  return ranked.slice(0, 12);
-}
-
-/* 🔥 Highlight */
-
-function highlight(text, keyword) {
-  const regex = new RegExp(`(${keyword})`, "gi");
-  return text.replace(regex, "<b>$1</b>");
-}
 
 export default function SearchBox() {
-  const [keyword, setKeyword] = useState("");
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
 
-  /* 🔥 Debounce */
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
 
   useEffect(() => {
-    if (!keyword.trim()) {
+
+    if (!query) {
       setResults([]);
       return;
     }
 
-    setLoading(true);
+    fetch("/data/search.json")
+      .then(res => res.json())
+      .then(data => {
 
-    const timer = setTimeout(() => {
-      const k = normalize(keyword);
-      const r = rankedSearch(k);
+        const q = query.toLowerCase();
 
-      setResults(r);
-      setLoading(false);
-    }, 120); // Shopee-feel delay
+        const filtered = data
+          .filter(p => p.title.toLowerCase().includes(q))
+          .slice(0, 10);
 
-    return () => clearTimeout(timer);
-  }, [keyword]);
+        setResults(filtered);
+      });
+
+  }, [query]);
 
   return (
-    <div className="search-wrapper">
+    <div className="search-box">
 
       <input
-        className="search-input"
         placeholder="Tìm sản phẩm..."
-        value={keyword}
-        onChange={(e) => setKeyword(e.target.value)}
+        value={query}
+        onChange={e => setQuery(e.target.value)}
       />
 
-      {(loading || results.length > 0) && (
-        <div className="search-dropdown">
+      {results.length > 0 && (
+        <div className="search-results">
 
-          {loading && (
-            <div className="search-loading">
-              Đang tìm...
-            </div>
-          )}
+          {results.map(p => (
+            <a
+              key={p.sku}
+              href={`/${p.slug}-${p.sku}`}
+            >
+              {p.title}
+            </a>
+          ))}
 
-          {!loading &&
-            results.map((p) => (
-              <a
-                key={p.slug + p.sku}
-                href={`/${p.slug}-${p.sku}/`}
-                className="search-item"
-                dangerouslySetInnerHTML={{
-                  __html: highlight(p.title, keyword),
-                }}
-              />
-            ))}
-
-          {!loading && results.length === 0 && (
-            <div className="search-empty">
-              Không tìm thấy
-            </div>
-          )}
         </div>
       )}
+
     </div>
   );
 }

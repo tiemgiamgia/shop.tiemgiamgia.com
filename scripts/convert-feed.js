@@ -24,9 +24,7 @@ const MAX_PRODUCTS_PER_KEYWORD = 40;
 function safeText(text = "") {
   return String(text)
     .replace(/"/g, "")
-    .replace(/\n/g, " ")
-    .replace(/\r/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/\r/g, "")
     .trim();
 }
 
@@ -35,17 +33,34 @@ function safeNumber(val) {
   return isNaN(num) ? 0 : num;
 }
 
-/* 🔥 FIX ENCODING CHUẨN SHOPEE */
+/* 🔥 FORMAT DESC CHUẨN SHOP */
+
+function formatDesc(desc = "") {
+
+  return String(desc)
+    .replace(/\r/g, "")
+    
+    /* 🔥 xuống dòng trước bullet Shopee */
+    .replace(/(🔸|▶|👉)/g, "\n$1")
+    
+    /* 🔥 xuống dòng trước dash list */
+    .replace(/\s[-–]\s/g, "\n- ")
+    
+    /* 🔥 xuống dòng trước dấu / nếu cần */
+    .replace(/\s\/\s/g, "\n/ ")
+
+    /* 🔥 gom khoảng trắng */
+    .replace(/\n+/g, "\n")
+    .trim();
+}
+
+/* 🔥 FIX ENCODING */
 
 function decodeBuffer(buffer) {
-
   const utf8 = new TextDecoder("utf-8").decode(buffer);
 
-  /* nếu thấy ký tự vỡ → fallback */
-
   if (utf8.includes("Ã") || utf8.includes("áº")) {
-    console.log("⚠ Broken UTF-8 detected → fallback Windows-1258");
-
+    console.log("⚠ Broken UTF-8 → fallback Windows-1258");
     return new TextDecoder("windows-1258").decode(buffer);
   }
 
@@ -68,13 +83,11 @@ function slugify(text) {
     .replace(/^-+|-+$/g, "");
 }
 
-/* 🔥 REMOVE SỐ */
-
 function isNumber(word) {
   return /^\d+$/.test(word);
 }
 
-/* 🔥 KEYWORD TỰ NHIÊN */
+/* 🔥 KEYWORD */
 
 function extractKeywords(title) {
 
@@ -85,17 +98,13 @@ function extractKeywords(title) {
     .filter(w =>
       w.length > 1 &&
       !STOP_WORDS.has(w) &&
-      !isNumber(w)          // 🔥 LOẠI SỐ
+      !isNumber(w)
     );
 
   const phrases = [];
 
-  /* single word */
-  for (const w of words) {
-    phrases.push(w);
-  }
+  for (const w of words) phrases.push(w);
 
-  /* 2-word phrase */
   for (let i = 0; i < words.length - 1; i++) {
     phrases.push(words[i] + " " + words[i + 1]);
   }
@@ -143,7 +152,6 @@ async function run() {
 
       const sku = safeText(row.sku);
 
-      /* 🔥 REMOVE DUPLICATE SKU */
       if (skuSet.has(sku)) continue;
       skuSet.add(sku);
 
@@ -155,12 +163,13 @@ async function run() {
         slug,
         price: safeNumber(row.price),
         discount: safeNumber(row.discount),
-        image: safeText(row.image)
+        image: safeText(row.image),
+
+        /* ✅ DESC FIX */
+        desc: formatDesc(row.desc)
       };
 
       products.push(product);
-
-      /* 🔥 KEYWORD ENGINE */
 
       const keywords = extractKeywords(title);
 
@@ -183,19 +192,15 @@ async function run() {
     fs.writeFileSync(INDEX_JSON, JSON.stringify(products));
     fs.writeFileSync(KEYWORD_JSON, JSON.stringify(keywordEngine));
 
-    /* 🔥 TRENDING CHUẨN SHOPEE */
-
     const trending = Object.entries(keywordEngine)
-      .sort((a, b) => b[1].length - a[1].length)   // 🔥 sort theo volume
+      .sort((a, b) => b[1].length - a[1].length)
       .slice(0, 120)
       .map(([keyword]) => keyword);
 
     fs.writeFileSync(TRENDING_JSON, JSON.stringify(trending));
 
     console.log("✅ Products:", products.length);
-    console.log("✅ Keywords:", Object.keys(keywordEngine).length);
-    console.log("✅ Trending:", trending.length);
-    console.log("✅ DONE — Suggest Engine chuẩn Shopee ✅");
+    console.log("✅ DONE ✅");
 
   } catch (err) {
     console.error("❌ ERROR:", err.message);

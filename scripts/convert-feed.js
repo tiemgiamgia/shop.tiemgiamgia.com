@@ -35,7 +35,24 @@ function safeNumber(val) {
   return isNaN(num) ? 0 : num;
 }
 
-/* 🔥 QUAN TRỌNG: TEXT NORMALIZE */
+/* 🔥 FIX ENCODING CHUẨN SHOPEE */
+
+function decodeBuffer(buffer) {
+
+  const utf8 = new TextDecoder("utf-8").decode(buffer);
+
+  /* nếu thấy ký tự vỡ → fallback */
+
+  if (utf8.includes("Ã") || utf8.includes("áº")) {
+    console.log("⚠ Broken UTF-8 detected → fallback Windows-1258");
+
+    return new TextDecoder("windows-1258").decode(buffer);
+  }
+
+  return utf8;
+}
+
+/* 🔥 NORMALIZE */
 
 function normalizeText(text = "") {
   return safeText(text)
@@ -51,14 +68,25 @@ function slugify(text) {
     .replace(/^-+|-+$/g, "");
 }
 
+/* 🔥 REMOVE SỐ */
+
+function isNumber(word) {
+  return /^\d+$/.test(word);
+}
+
 /* 🔥 KEYWORD TỰ NHIÊN */
 
 function extractKeywords(title) {
+
   const clean = normalizeText(title);
 
   const words = clean
     .split(/\s+/)
-    .filter(w => w.length > 1 && !STOP_WORDS.has(w));
+    .filter(w =>
+      w.length > 1 &&
+      !STOP_WORDS.has(w) &&
+      !isNumber(w)          // 🔥 LOẠI SỐ
+    );
 
   const phrases = [];
 
@@ -79,6 +107,7 @@ function extractKeywords(title) {
 
 async function run() {
   try {
+
     console.log("🚀 Fetching CSV...");
 
     const res = await fetch(CSV_URL);
@@ -92,7 +121,7 @@ async function run() {
       "MB"
     );
 
-    const text = new TextDecoder("utf-8").decode(buffer);
+    const text = decodeBuffer(buffer);
 
     const records = parse(text, {
       columns: true,
@@ -113,6 +142,8 @@ async function run() {
       if (!row.name || !row.sku) continue;
 
       const sku = safeText(row.sku);
+
+      /* 🔥 REMOVE DUPLICATE SKU */
       if (skuSet.has(sku)) continue;
       skuSet.add(sku);
 
@@ -129,7 +160,7 @@ async function run() {
 
       products.push(product);
 
-      /* 🔥 KEYWORD REAL SEARCH */
+      /* 🔥 KEYWORD ENGINE */
 
       const keywords = extractKeywords(title);
 
@@ -152,12 +183,18 @@ async function run() {
     fs.writeFileSync(INDEX_JSON, JSON.stringify(products));
     fs.writeFileSync(KEYWORD_JSON, JSON.stringify(keywordEngine));
 
-    const trending = Object.keys(keywordEngine).slice(0, 120);
+    /* 🔥 TRENDING CHUẨN SHOPEE */
+
+    const trending = Object.entries(keywordEngine)
+      .sort((a, b) => b[1].length - a[1].length)   // 🔥 sort theo volume
+      .slice(0, 120)
+      .map(([keyword]) => keyword);
 
     fs.writeFileSync(TRENDING_JSON, JSON.stringify(trending));
 
     console.log("✅ Products:", products.length);
     console.log("✅ Keywords:", Object.keys(keywordEngine).length);
+    console.log("✅ Trending:", trending.length);
     console.log("✅ DONE — Suggest Engine chuẩn Shopee ✅");
 
   } catch (err) {

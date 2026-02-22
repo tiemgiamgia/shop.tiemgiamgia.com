@@ -1,4 +1,4 @@
-import { loadFeed } from "@/lib/feed";
+import { loadProductBySku } from "@/lib/feed";
 import Header from "@/layout/Header";
 import Footer from "@/layout/Footer";
 
@@ -6,7 +6,6 @@ export default async function Page({ params }) {
 
   const slugParam = params?.slug || "";
 
-  /* 🔥 Extract SKU an toàn */
   const parts = slugParam.split("-");
   const sku = parts.length ? parts.pop() : null;
 
@@ -14,8 +13,7 @@ export default async function Page({ params }) {
     return <div>Invalid product</div>;
   }
 
-  const products = await loadFeed();
-  const product = products.find(p => p.sku === sku);
+  const product = await loadProductBySku(sku);
 
   if (!product) {
     return <div>Not found</div>;

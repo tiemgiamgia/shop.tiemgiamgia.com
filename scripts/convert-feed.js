@@ -9,69 +9,26 @@ const PRODUCT_DIR = path.join(DATA_DIR, "products");
 
 const CHUNK_SIZE = 5000;
 
-/* ================= ENCODING MONSTER FIX ================= */
-
-/* 🔥 Repair multi-broken Vietnamese */
-
-function repairVietnamese(text = "") {
-  try {
-    return Buffer
-      .from(text, "latin1")     // tầng 1
-      .toString("utf8")         // tầng 2
-      .normalize("NFC");        // chuẩn unicode
-  } catch {
-    return text;
-  }
-}
-
-/* 🔥 Clean byte rác */
-
-function cleanGarbage(text = "") {
-  return text
-    .replace(/[\u0000-\u001F\u007F]/g, "")
-    .replace(/\uFFFD/g, "")
-    .trim();
-}
-
-/* 🔥 Decode CSV chuẩn */
-
-function decodeBuffer(buffer) {
-
-  /* thử UTF-8 */
-
-  let text = new TextDecoder("utf-8").decode(buffer);
-
-  if (text.includes("Ã") || text.includes("áº")) {
-    console.log("⚠ UTF-8 broken → trying Windows-1258");
-
-    text = new TextDecoder("windows-1258").decode(buffer);
-  }
-
-  /* 🔥 Repair tầng sâu */
-
-  text = repairVietnamese(text);
-
-  return text;
-}
-
 /* ================= SAFE ================= */
 
 function safeText(text = "") {
-
-  let cleaned = String(text)
+  return String(text)
     .replace(/"/g, "")
     .replace(/\r/g, "")
-    .replace(/\n/g, " ");
-
-  cleaned = repairVietnamese(cleaned); // 🔥 FIX FONT
-  cleaned = cleanGarbage(cleaned);     // 🔥 FIX BYTE
-
-  return cleaned;
+    .replace(/\n/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function safeNumber(val) {
   const num = Number(String(val).replace(/[^\d]/g, ""));
   return isNaN(num) ? 0 : num;
+}
+
+/* ================= DECODE ================= */
+
+function decodeBuffer(buffer) {
+  return new TextDecoder("utf-8").decode(buffer);
 }
 
 /* ================= SLUG ================= */
@@ -171,7 +128,7 @@ async function run() {
 
     console.log("✅ Products:", products.length);
     console.log("✅ Chunks:", chunkIndex - 1);
-    console.log("✅ DONE 😈");
+    console.log("✅ DONE ✅");
 
   } catch (err) {
     console.error("❌ ERROR:", err.message);

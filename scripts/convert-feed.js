@@ -7,6 +7,8 @@ const CSV_URL = "https://feeds.tiemgiamgia.com/shopee.csv";
 const DATA_DIR = path.join(process.cwd(), "public/data");
 const PRODUCT_DIR = path.join(DATA_DIR, "products");
 
+const CHUNK_SIZE = 5000; // 🔥 cực kỳ quan trọng
+
 function safeText(text = "") {
   return String(text)
     .replace(/"/g, "")
@@ -55,6 +57,8 @@ async function run() {
     fs.mkdirSync(PRODUCT_DIR, { recursive: true });
 
     const search = [];
+    const products = [];
+
     const skuSet = new Set();
 
     for (const row of records) {
@@ -65,33 +69,45 @@ async function run() {
       skuSet.add(sku);
 
       const title = safeText(row.name);
-      const slug = slugify(title) + "-" + sku;
+      const slug = slugify(title);
 
-      /* ✅ SEARCH INDEX */
-      search.push({ title, slug });
+      search.push({ title, slug, sku });
 
-      /* ✅ PRODUCT FILE RIÊNG */
-      const product = {
+      products.push({
         title,
         slug,
+        sku,
         price: safeNumber(row.price),
         discount: safeNumber(row.discount),
         image: safeText(row.image),
         desc: safeText(row.desc)
-      };
+      });
+    }
+
+    /* 🔥 CHUNK PRODUCTS */
+
+    let chunkIndex = 1;
+
+    for (let i = 0; i < products.length; i += CHUNK_SIZE) {
+      const chunk = products.slice(i, i + CHUNK_SIZE);
 
       fs.writeFileSync(
-        path.join(PRODUCT_DIR, slug + ".json"),
-        JSON.stringify(product)
+        path.join(PRODUCT_DIR, `${chunkIndex}.json`),
+        JSON.stringify(chunk)
       );
+
+      chunkIndex++;
     }
+
+    /* 🔥 SEARCH INDEX */
 
     fs.writeFileSync(
       path.join(DATA_DIR, "search.json"),
       JSON.stringify(search)
     );
 
-    console.log("✅ Products:", search.length);
+    console.log("✅ Products:", products.length);
+    console.log("✅ Chunks:", chunkIndex - 1);
     console.log("✅ DONE ✅");
 
   } catch (err) {

@@ -17,17 +17,11 @@ const STOP_WORDS = new Set([
   "hot","new","sale","combo"
 ]);
 
-const KEYWORD_WEIGHT = {
-  ao: 8,
-  quan: 8,
-  honda: 7,
-  winner: 7,
-  yamaha: 7,
-  bluetooth: 4
-};
-
-/* 🔥 LIGHT MODE → FIX Cloudflare 25MB */
+/* 🔥 LIGHT MODE → FIX Cloudflare */
 const LIGHT_MODE = true;
+
+/* 🔥 LIMIT để JSON không nổ */
+const MAX_PRODUCTS_PER_KEYWORD = 20;
 
 /* ================= UTIL ================= */
 
@@ -61,10 +55,6 @@ function cleanWords(title) {
     .filter(w => w.length > 1 && !STOP_WORDS.has(w));
 }
 
-function getWeight(word) {
-  return KEYWORD_WEIGHT[word] || 1;
-}
-
 function detectDelimiter(csv) {
   const firstLine = csv.split("\n")[0];
   return firstLine.includes(";") ? ";" : ",";
@@ -77,7 +67,6 @@ async function run() {
     console.log("🚀 Fetching CSV...");
 
     const res = await fetch(CSV_URL);
-
     if (!res.ok) throw new Error("CSV download failed");
 
     const buffer = await res.arrayBuffer();
@@ -99,7 +88,6 @@ async function run() {
     }
 
     const delimiter = detectDelimiter(text);
-    console.log("✅ Delimiter:", delimiter);
 
     const records = parse(text, {
       columns: true,
@@ -113,7 +101,7 @@ async function run() {
     console.log("✅ CSV rows:", records.length);
 
     const products = [];
-    const keywordMap = new Map();
+    const keywordEngine = {};
     const skuSet = new Set();
 
     let missingPrice = 0;
@@ -125,13 +113,12 @@ async function run() {
 
       const sku = safeText(row.sku);
 
-      /* 🔥 REMOVE DUPLICATE SKU */
       if (skuSet.has(sku)) continue;
       skuSet.add(sku);
 
       const safeTitle = safeText(row.name);
 
-      let slug = slugify(safeTitle) + "-" + sku;
+      const slug = slugify(safeTitle) + "-" + sku;
 
       const safePrice = safeNumber(row.price);
       const safeDiscount = safeNumber(row.discount);
@@ -145,28 +132,39 @@ async function run() {
         slug,
         price: safePrice,
         discount: safeDiscount,
-        image: safeImage,
-        affiliate: `https://go.isclix.com/deep_link/5275212048974723439/4751584435713464237?url=${safeText(row.url)}`
+        image: safeImage
       };
-
-      /* 🔥 LIGHT MODE → bỏ field nặng */
-      if (!LIGHT_MODE) {
-        product.brand = safeText(row.brand);
-        product.category = safeText(row.category);
-        product.desc = safeText(row.desc);
-      }
 
       products.push(product);
 
-      /* KEYWORD ENGINE */
+      /* 🔥 SEARCH ENGINE */
 
       const words = cleanWords(safeTitle);
 
       for (const word of words) {
-        keywordMap.set(
-          word,
-          (keywordMap.get(word) || 0) + getWeight(word)
-        );
+
+        if (!keywordEngine[word]) {
+          keywordEngine[word] = [];
+        }
+
+        if (keywordEngine[word].length < MAX_PRODUCTS_PER_KEYWORD) {
+          keywordEngine[word].push(product);
+        }
+      }
+
+      /* 🔥 PHRASE ENGINE (ao-so-mi) */
+
+      for (let i = 0; i < words.length - 1; i++) {
+
+        const phrase = `${words[i]}-${words[i + 1]}`;
+
+        if (!keywordEngine[phrase]) {
+          keywordEngine[phrase] = [];
+        }
+
+        if (keywordEngine[phrase].length < MAX_PRODUCTS_PER_KEYWORD) {
+          keywordEngine[phrase].push(product);
+        }
       }
     }
 
@@ -174,32 +172,20 @@ async function run() {
     console.log("📊 Missing price:", missingPrice);
     console.log("📊 Missing image:", missingImage);
 
-    if (products.length === 0) {
-      console.log("🚨 Feed empty → fallback");
-      products.push({ title: "fallback product" });
-    }
-
     if (!fs.existsSync(OUTPUT_DIR)) {
       fs.mkdirSync(OUTPUT_DIR, { recursive: true });
     }
 
-    /* 🔥 MINIFY JSON → giảm size mạnh */
     fs.writeFileSync(INDEX_JSON, JSON.stringify(products));
+    fs.writeFileSync(KEYWORD_JSON, JSON.stringify(keywordEngine));
 
-    const sortedKeywords = [...keywordMap.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([keyword, score]) => ({ keyword, score }));
-
-    fs.writeFileSync(KEYWORD_JSON, JSON.stringify(sortedKeywords));
-
-    const trending = sortedKeywords
-      .slice(0, 120)
-      .map(k => k.keyword);
+    const trending = Object.keys(keywordEngine)
+      .slice(0, 120);
 
     fs.writeFileSync(TRENDING_JSON, JSON.stringify(trending));
 
     console.log("✅ Products:", products.length);
-    console.log("✅ Keywords:", sortedKeywords.length);
+    console.log("✅ Keywords:", Object.keys(keywordEngine).length);
     console.log("✅ Trending:", trending.length);
 
   } catch (err) {

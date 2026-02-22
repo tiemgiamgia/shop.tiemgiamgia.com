@@ -1,8 +1,18 @@
-export default async function Page(props) {
+import { loadFeed } from "@/lib/feed";
+import Header from "@/layout/Header";
+import Footer from "@/layout/Footer";
 
-  const { params } = props;
+export default async function Page({ params }) {
 
-  const sku = params.slug.split("-").pop();
+  const slugParam = params?.slug || "";
+
+  /* 🔥 Extract SKU an toàn */
+  const parts = slugParam.split("-");
+  const sku = parts.length ? parts.pop() : null;
+
+  if (!sku) {
+    return <div>Invalid product</div>;
+  }
 
   const products = await loadFeed();
   const product = products.find(p => p.sku === sku);
@@ -17,10 +27,15 @@ export default async function Page(props) {
 
       <main className="container">
         <div className="product">
-          <img src={product.image} />
+
+          <img
+            src={product.image}
+            alt={product.title}
+            loading="lazy"
+          />
 
           <div>
-            <h1>{product.name}</h1>
+            <h1>{product.title}</h1>
 
             <div className="price">
               {product.price.toLocaleString()}đ
@@ -28,8 +43,11 @@ export default async function Page(props) {
 
             <p>{product.desc}</p>
 
-            <a href={product.url}>Xem trên Shopee</a>
+            <a href={product.url}>
+              Xem trên Shopee
+            </a>
           </div>
+
         </div>
       </main>
 

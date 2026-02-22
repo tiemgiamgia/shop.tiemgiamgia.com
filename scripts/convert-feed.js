@@ -15,33 +15,6 @@ function buildSlug(name, sku) {
   );
 }
 
-function parseCSV(csv) {
-  const rows = [];
-  let current = "";
-  let insideQuotes = false;
-
-  for (let i = 0; i < csv.length; i++) {
-    const char = csv[i];
-
-    if (char === '"') {
-      insideQuotes = !insideQuotes;
-      continue;
-    }
-
-    if (char === "\n" && !insideQuotes) {
-      rows.push(current);
-      current = "";
-      continue;
-    }
-
-    current += char;
-  }
-
-  if (current) rows.push(current);
-
-  return rows.map(row => row.split(","));
-}
-
 async function run() {
   try {
     console.log("Fetching feed...");
@@ -49,24 +22,34 @@ async function run() {
     const res = await fetch("https://feeds.tiemgiamgia.com/shopee.csv");
 
     if (!res.ok) {
-      console.error("Feed fetch failed:", res.status);
+      console.error("Feed fetch failed");
       return;
     }
 
-    /* ✅ FIX BOM + ENCODING */
-
     const buffer = await res.arrayBuffer();
-    const text = new TextDecoder("utf-8").decode(buffer);
 
-    console.log("Feed size:", (text.length / 1024 / 1024).toFixed(2), "MB");
+    console.log(
+      "Feed size:",
+      (buffer.byteLength / 1024 / 1024).toFixed(2),
+      "MB"
+    );
 
-    const rows = parseCSV(text);
+    /* 🔥 FIX ENCODING */
+
+    let text;
+
+    try {
+      text = new TextDecoder("utf-8").decode(buffer);
+    } catch {
+      console.log("UTF-8 failed → fallback Windows-1258");
+      text = new TextDecoder("windows-1258").decode(buffer);
+    }
+
+    const rows = text.split(/\r?\n/);
 
     console.log("CSV rows:", rows.length);
 
-    /* HEADER */
-
-    const header = rows[0];
+    const header = rows[0].split(",");
 
     console.log("Header:", header);
 
@@ -78,60 +61,40 @@ async function run() {
     const imageIndex = header.indexOf("image");
     const descIndex = header.indexOf("desc");
 
-    if (skuIndex === -1) {
-      console.error("CSV STRUCTURE ERROR");
-      return;
-    }
-
     const rawProducts = [];
 
     for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
+      const cols = rows[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
 
-      if (!row[skuIndex]) continue;
+      if (!cols[skuIndex]) continue;
 
       rawProducts.push({
-        sku: row[skuIndex]?.trim(),
-        name: row[nameIndex]?.trim(),
-        url: row[urlIndex]?.trim(),
-        price: Number(row[priceIndex] || 0),
-        discount: Number(row[discountIndex] || 0),
-        image: row[imageIndex]?.trim(),
-        desc: row[descIndex]?.trim()
+        sku: cols[skuIndex],
+        name: cols[nameIndex],
+        url: cols[urlIndex],
+        price: cols[priceIndex] ? Number(cols[priceIndex]) : null,
+        discount: cols[discountIndex]
+          ? Number(cols[discountIndex])
+          : null,
+        image: cols[imageIndex],
+        desc: cols[descIndex]
       });
     }
 
     console.log("Products (raw):", rawProducts.length);
 
-    /* DEBUG THIẾU FIELD */
-
-    let missingName = 0;
-    let missingImage = 0;
-    let missingPrice = 0;
-
-    rawProducts.forEach(p => {
-      if (!p.name) missingName++;
-      if (!p.image) missingImage++;
-      if (!p.price) missingPrice++;
-    });
-
-    console.log("Missing name:", missingName);
-    console.log("Missing image:", missingImage);
-    console.log("Missing price:", missingPrice);
-
-    /* REMOVE DUP SKU */
+    /* 🔥 REMOVE DUPLICATE SKU */
 
     const map = new Map();
 
-    rawProducts.forEach(p => {
-      if (!p.sku) return;
-      if (map.has(p.sku)) return;
+    for (const p of rawProducts) {
+      if (map.has(p.sku)) continue;
 
       map.set(p.sku, {
         ...p,
         slug: buildSlug(p.name, p.sku)
       });
-    });
+    }
 
     const products = Array.from(map.values());
 

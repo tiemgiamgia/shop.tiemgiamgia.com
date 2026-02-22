@@ -9,13 +9,22 @@ const PRODUCT_DIR = path.join(DATA_DIR, "products");
 
 const CHUNK_SIZE = 5000; // 🔥 cực kỳ quan trọng
 
+function fixBrokenVietnamese(text = "") {
+  try {
+    return Buffer.from(text, "latin1").toString("utf8");
+  } catch {
+    return text;
+  }
+}
+
 function safeText(text = "") {
-  return String(text)
+  const cleaned = String(text)
     .replace(/"/g, "")
     .replace(/\r/g, "")
     .trim();
-}
 
+  return fixBrokenVietnamese(cleaned);
+}
 function safeNumber(val) {
   const num = Number(String(val).replace(/[^\d]/g, ""));
   return isNaN(num) ? 0 : num;

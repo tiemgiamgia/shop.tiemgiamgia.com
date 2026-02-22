@@ -37,30 +37,30 @@ export default async function Home() {
 
         <h1>Sản phẩm mới</h1>
 
-        <div className="grid">
-          {products.slice(0, 20).map(p => (
+       <div className="grid">
+  {products.slice(0, 20).map(p => (
 
-            <a
-              key={p.sku}
-              href={`/${p.slug}-${p.sku}`}   {/* 🔥 QUAN TRỌNG */}
-              className="card"
-            >
-              <img
-                src={p.image}
-                alt={p.title}
-                loading="lazy"               {/* 🔥 Tối ưu */}
-              />
+    <a
+      key={p.sku}
+      href={`/${p.slug}-${p.sku}`}
+      className="card"
+    >
+      <img
+        src={p.image}
+        alt={p.title}
+        loading="lazy"
+      />
 
-              <div>{p.title}</div>
+      <div>{p.title}</div>
 
-              <div className="price">
-                {p.price.toLocaleString()}đ
-              </div>
+      <div className="price">
+        {(p.price || 0).toLocaleString()}đ
+      </div>
 
-            </a>
+    </a>
 
-          ))}
-        </div>
+  ))}
+</div>
 
       </main>
 

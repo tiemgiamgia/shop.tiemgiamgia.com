@@ -17,7 +17,9 @@ const STOP_WORDS = new Set([
   "hot","new","sale","combo"
 ]);
 
-const MAX_PRODUCTS_PER_KEYWORD = 40;
+const MAX_PRODUCTS_PER_KEYWORD = 20;   // 🔥 giảm mạnh
+const MIN_VOLUME = 3;                  // 🔥 keyword phải có >=3 sản phẩm
+const MAX_KEYWORDS = 4000;             // 🔥 chặn trần size
 
 /* ================= UTIL ================= */
 
@@ -33,29 +35,6 @@ function safeNumber(val) {
   return isNaN(num) ? 0 : num;
 }
 
-/* 🔥 FORMAT DESC CHUẨN SHOP */
-
-function formatDesc(desc = "") {
-
-  return String(desc)
-    .replace(/\r/g, "")
-    
-    /* 🔥 xuống dòng trước bullet Shopee */
-    .replace(/(🔸|▶|👉)/g, "\n$1")
-    
-    /* 🔥 xuống dòng trước dash list */
-    .replace(/\s[-–]\s/g, "\n- ")
-    
-    /* 🔥 xuống dòng trước dấu / nếu cần */
-    .replace(/\s\/\s/g, "\n/ ")
-
-    /* 🔥 gom khoảng trắng */
-    .replace(/\n+/g, "\n")
-    .trim();
-}
-
-/* 🔥 FIX ENCODING */
-
 function decodeBuffer(buffer) {
   const utf8 = new TextDecoder("utf-8").decode(buffer);
 
@@ -66,8 +45,6 @@ function decodeBuffer(buffer) {
 
   return utf8;
 }
-
-/* 🔥 NORMALIZE */
 
 function normalizeText(text = "") {
   return safeText(text)
@@ -87,10 +64,7 @@ function isNumber(word) {
   return /^\d+$/.test(word);
 }
 
-/* 🔥 KEYWORD */
-
 function extractKeywords(title) {
-
   const clean = normalizeText(title);
 
   const words = clean
@@ -143,7 +117,7 @@ async function run() {
     console.log("✅ CSV rows:", records.length);
 
     const products = [];
-    const keywordEngine = {};
+    const keywordMap = new Map();
     const skuSet = new Set();
 
     for (const row of records) {
@@ -158,32 +132,45 @@ async function run() {
       const title = safeText(row.name);
       const slug = slugify(title) + "-" + sku;
 
-      const product = {
+      products.push({
         title,
         slug,
         price: safeNumber(row.price),
         discount: safeNumber(row.discount),
         image: safeText(row.image),
-
-        /* ✅ DESC FIX */
-        desc: formatDesc(row.desc)
-      };
-
-      products.push(product);
+        desc: safeText(row.desc)
+      });
 
       const keywords = extractKeywords(title);
 
       for (const keyword of keywords) {
 
-        if (!keywordEngine[keyword]) {
-          keywordEngine[keyword] = [];
+        if (!keywordMap.has(keyword)) {
+          keywordMap.set(keyword, []);
         }
 
-        if (keywordEngine[keyword].length < MAX_PRODUCTS_PER_KEYWORD) {
-          keywordEngine[keyword].push(slug);
+        const list = keywordMap.get(keyword);
+
+        if (list.length < MAX_PRODUCTS_PER_KEYWORD) {
+          list.push(slug);
         }
       }
     }
+
+    console.log("✅ Products:", products.length);
+
+    /* 🔥 FILTER KEYWORD VOLUME */
+
+    const filteredKeywords = [...keywordMap.entries()]
+      .filter(([_, list]) => list.length >= MIN_VOLUME)
+      .sort((a, b) => b[1].length - a[1].length)
+      .slice(0, MAX_KEYWORDS);
+
+    const keywordEngine = Object.fromEntries(filteredKeywords);
+
+    const trending = filteredKeywords
+      .slice(0, 120)
+      .map(([keyword]) => keyword);
 
     if (!fs.existsSync(OUTPUT_DIR)) {
       fs.mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -191,16 +178,10 @@ async function run() {
 
     fs.writeFileSync(INDEX_JSON, JSON.stringify(products));
     fs.writeFileSync(KEYWORD_JSON, JSON.stringify(keywordEngine));
-
-    const trending = Object.entries(keywordEngine)
-      .sort((a, b) => b[1].length - a[1].length)
-      .slice(0, 120)
-      .map(([keyword]) => keyword);
-
     fs.writeFileSync(TRENDING_JSON, JSON.stringify(trending));
 
-    console.log("✅ Products:", products.length);
-    console.log("✅ DONE ✅");
+    console.log("✅ Keywords:", filteredKeywords.length);
+    console.log("✅ Trending:", trending.length);
 
   } catch (err) {
     console.error("❌ ERROR:", err.message);

@@ -1,11 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function SearchBox() {
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
+  const [data, setData] = useState([]);
+
+  useEffect(() => {
+    fetch("/data/search.json")
+      .then(res => res.json())
+      .then(setData);
+  }, []);
 
   useEffect(() => {
 
@@ -14,23 +21,18 @@ export default function SearchBox() {
       return;
     }
 
-    fetch("/data/search.json")
-      .then(res => res.json())
-      .then(data => {
+    const q = query.toLowerCase();
 
-        const q = query.toLowerCase();
+    const filtered = data
+      .filter(p => p.title.toLowerCase().includes(q))
+      .slice(0, 10);
 
-        const filtered = data
-          .filter(p => p.title.toLowerCase().includes(q))
-          .slice(0, 10);
-
-        setResults(filtered);
-      });
+    setResults(filtered);
 
   }, [query]);
 
   return (
-    <div className="search-box">
+    <div className="search">
 
       <input
         placeholder="Tìm sản phẩm..."
@@ -38,9 +40,8 @@ export default function SearchBox() {
         onChange={e => setQuery(e.target.value)}
       />
 
-      {results.length > 0 && (
+      {!!results.length && (
         <div className="search-results">
-
           {results.map(p => (
             <a
               key={p.sku}
@@ -49,10 +50,8 @@ export default function SearchBox() {
               {p.title}
             </a>
           ))}
-
         </div>
       )}
-
     </div>
   );
 }

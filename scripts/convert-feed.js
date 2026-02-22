@@ -17,7 +17,7 @@ const STOP_WORDS = new Set([
   "hot","new","sale","combo"
 ]);
 
-const MAX_SLUG_PER_KEYWORD = 30;   // 🔥 QUAN TRỌNG NHẤT
+const MAX_PRODUCTS_PER_KEYWORD = 40;
 
 /* ================= UTIL ================= */
 
@@ -35,20 +35,44 @@ function safeNumber(val) {
   return isNaN(num) ? 0 : num;
 }
 
-function slugify(text) {
+/* 🔥 QUAN TRỌNG: TEXT NORMALIZE */
+
+function normalizeText(text = "") {
   return safeText(text)
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
+    .replace(/đ/g, "d");
+}
+
+function slugify(text) {
+  return normalizeText(text)
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
 
-function cleanWords(title) {
-  return slugify(title)
-    .split("-")
+/* 🔥 KEYWORD TỰ NHIÊN */
+
+function extractKeywords(title) {
+  const clean = normalizeText(title);
+
+  const words = clean
+    .split(/\s+/)
     .filter(w => w.length > 1 && !STOP_WORDS.has(w));
+
+  const phrases = [];
+
+  /* single word */
+  for (const w of words) {
+    phrases.push(w);
+  }
+
+  /* 2-word phrase */
+  for (let i = 0; i < words.length - 1; i++) {
+    phrases.push(words[i] + " " + words[i + 1]);
+  }
+
+  return phrases;
 }
 
 /* ================= RUN ================= */
@@ -105,33 +129,18 @@ async function run() {
 
       products.push(product);
 
-      /* 🔥 KEYWORD → ONLY STORE SLUG */
+      /* 🔥 KEYWORD REAL SEARCH */
 
-      const words = cleanWords(title);
+      const keywords = extractKeywords(title);
 
-      for (const word of words) {
+      for (const keyword of keywords) {
 
-        if (!keywordEngine[word]) {
-          keywordEngine[word] = [];
+        if (!keywordEngine[keyword]) {
+          keywordEngine[keyword] = [];
         }
 
-        if (keywordEngine[word].length < MAX_SLUG_PER_KEYWORD) {
-          keywordEngine[word].push(slug);
-        }
-      }
-
-      /* 🔥 PHRASE ENGINE */
-
-      for (let i = 0; i < words.length - 1; i++) {
-
-        const phrase = `${words[i]}-${words[i + 1]}`;
-
-        if (!keywordEngine[phrase]) {
-          keywordEngine[phrase] = [];
-        }
-
-        if (keywordEngine[phrase].length < MAX_SLUG_PER_KEYWORD) {
-          keywordEngine[phrase].push(slug);
+        if (keywordEngine[keyword].length < MAX_PRODUCTS_PER_KEYWORD) {
+          keywordEngine[keyword].push(slug);
         }
       }
     }
@@ -149,7 +158,7 @@ async function run() {
 
     console.log("✅ Products:", products.length);
     console.log("✅ Keywords:", Object.keys(keywordEngine).length);
-    console.log("✅ keyword.json size FIXED ✅");
+    console.log("✅ DONE — Suggest Engine chuẩn Shopee ✅");
 
   } catch (err) {
     console.error("❌ ERROR:", err.message);

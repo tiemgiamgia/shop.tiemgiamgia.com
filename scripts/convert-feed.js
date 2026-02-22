@@ -8,7 +8,7 @@ const DATA_DIR = path.join(process.cwd(), "public/data");
 const PRODUCT_DIR = path.join(DATA_DIR, "products");
 const SEARCH_DIR = path.join(DATA_DIR, "search");
 
-const CHUNK_SIZE = 5000;
+const CHUNK_SIZE = 1000;
 
 /* ================= SAFE ================= */
 

@@ -7,20 +7,9 @@ const CSV_URL = "https://feeds.tiemgiamgia.com/shopee.csv";
 const OUTPUT_DIR = path.join(process.cwd(), "public/data");
 const PRODUCTS_DIR = path.join(OUTPUT_DIR, "products");
 
-const KEYWORD_JSON = path.join(OUTPUT_DIR, "keyword.json");
-const TRENDING_JSON = path.join(OUTPUT_DIR, "trending.json");
-
 /* ================= CONFIG ================= */
 
-const STOP_WORDS = new Set([
-  "sieu","chinh","hang","gia","re",
-  "hot","new","sale","combo"
-]);
-
-const CHUNK_SIZE = 500;                 // 🔥 QUAN TRỌNG
-const MAX_PRODUCTS_PER_KEYWORD = 20;
-const MIN_VOLUME = 3;
-const MAX_KEYWORDS = 4000;
+const CHUNK_SIZE = 500;
 
 /* ================= UTIL ================= */
 
@@ -36,55 +25,43 @@ function safeNumber(val) {
   return isNaN(num) ? 0 : num;
 }
 
+/* ✅ FIX FONT TUYỆT ĐỐI */
+
 function decodeBuffer(buffer) {
-  const utf8 = new TextDecoder("utf-8").decode(buffer);
+  console.log("✅ Force Encoding: Windows-1258");
 
-  if (utf8.includes("Ã") || utf8.includes("áº")) {
-    console.log("⚠ Broken UTF-8 → fallback Windows-1258");
-    return new TextDecoder("windows-1258").decode(buffer);
-  }
-
-  return utf8;
+  return new TextDecoder("windows-1258").decode(buffer);
 }
+
+/* ✅ NORMALIZE */
 
 function normalizeText(text = "") {
   return safeText(text)
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d");
+    .normalize("NFC");        // 🔥 FIX Unicode tổ hợp
+}
+
+/* ✅ FORMAT DESC */
+
+function formatDesc(desc = "") {
+
+  const clean = normalizeText(desc);
+
+  return clean
+    .replace(/ - /g, "\n- ")
+    .replace(/ ▶ /g, "\n▶ ")
+    .replace(/ 🔸 /g, "\n🔸 ")
+    .replace(/ \/ /g, "\n")
+    .trim();
 }
 
 function slugify(text) {
   return normalizeText(text)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-}
-
-function isNumber(word) {
-  return /^\d+$/.test(word);
-}
-
-function extractKeywords(title) {
-  const clean = normalizeText(title);
-
-  const words = clean
-    .split(/\s+/)
-    .filter(w =>
-      w.length > 1 &&
-      !STOP_WORDS.has(w) &&
-      !isNumber(w)
-    );
-
-  const phrases = [];
-
-  for (const w of words) phrases.push(w);
-
-  for (let i = 0; i < words.length - 1; i++) {
-    phrases.push(words[i] + " " + words[i + 1]);
-  }
-
-  return phrases;
 }
 
 /* ================= RUN ================= */
@@ -118,7 +95,6 @@ async function run() {
     console.log("✅ CSV rows:", records.length);
 
     const products = [];
-    const keywordMap = new Map();
     const skuSet = new Set();
 
     for (const row of records) {
@@ -130,7 +106,7 @@ async function run() {
       if (skuSet.has(sku)) continue;
       skuSet.add(sku);
 
-      const title = safeText(row.name);
+      const title = normalizeText(row.name);
       const slug = slugify(title) + "-" + sku;
 
       products.push({
@@ -138,29 +114,12 @@ async function run() {
         slug,
         price: safeNumber(row.price),
         discount: safeNumber(row.discount),
-        image: safeText(row.image)
-        // ❌ KHÔNG desc → giảm size cực mạnh
+        image: safeText(row.image),
+        desc: formatDesc(row.desc)   // ✅ DESC CHUẨN
       });
-
-      const keywords = extractKeywords(title);
-
-      for (const keyword of keywords) {
-
-        if (!keywordMap.has(keyword)) {
-          keywordMap.set(keyword, []);
-        }
-
-        const list = keywordMap.get(keyword);
-
-        if (list.length < MAX_PRODUCTS_PER_KEYWORD) {
-          list.push(slug);
-        }
-      }
     }
 
-    console.log("✅ Products:", products.length);
-
-    /* 🔥 CHUNK PRODUCTS */
+    /* ✅ CHUNK PRODUCTS */
 
     fs.rmSync(PRODUCTS_DIR, { recursive: true, force: true });
     fs.mkdirSync(PRODUCTS_DIR, { recursive: true });
@@ -179,31 +138,9 @@ async function run() {
       page++;
     }
 
+    console.log("✅ Products:", products.length);
     console.log("✅ Pages:", page - 1);
-
-    /* 🔥 FILTER KEYWORDS */
-
-    const filteredKeywords = [...keywordMap.entries()]
-      .filter(([_, list]) => list.length >= MIN_VOLUME)
-      .sort((a, b) => b[1].length - a[1].length)
-      .slice(0, MAX_KEYWORDS);
-
-    const keywordEngine = Object.fromEntries(filteredKeywords);
-
-    const trending = filteredKeywords
-      .slice(0, 120)
-      .map(([keyword]) => keyword);
-
-    if (!fs.existsSync(OUTPUT_DIR)) {
-      fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-    }
-
-    fs.writeFileSync(KEYWORD_JSON, JSON.stringify(keywordEngine));
-    fs.writeFileSync(TRENDING_JSON, JSON.stringify(trending));
-
-    console.log("✅ Keywords:", filteredKeywords.length);
-    console.log("✅ Trending:", trending.length);
-    console.log("✅ DONE — Cloudflare Safe ✅");
+    console.log("✅ FONT + DESC FIXED ✅");
 
   } catch (err) {
     console.error("❌ ERROR:", err.message);
